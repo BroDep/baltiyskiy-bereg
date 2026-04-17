@@ -13,3 +13,26 @@ dist/
 build/
 *.egg-info/
 cli-proxy-api
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.gsd-id
+.bg-shell/
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+.env.*
+!.env.example
+node_modules/
+.next/
+venv/
+target/
+vendor/
+*.log
+coverage/
+.cache/
+tmp/

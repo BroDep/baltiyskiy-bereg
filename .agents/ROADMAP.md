@@ -1,75 +1,163 @@
-# Roadmap — Baltiyskiy Bereg
+# Roadmap — Baltiyskiy Bereg MVP
 
-## Phase 1: Foundation (MVP)
+## Delivery Principles
 
-| ID | Фича | Описание | Приоритет | Контракт |
-|----|------|---------|-----------|----------|
-| **F-001** | Исправить Dockerfile | Multi-stage build, uv sync, минимум образ | P0 | [#11](https://github.com/BroDep/baltiyskiy-bereg/issues/11) |
-| **F-002** | Структура модулей | src/{database,services,models,api} | P0 | [#12](https://github.com/BroDep/baltiyskiy-bereg/issues/12) |
-| **F-003** | YandexGPT integration | Подключение к API, базовые запросы | P0 | [#13](https://github.com/BroDep/baltiyskiy-bereg/issues/13) |
-| **F-004** | Database client | Подключение к MSSQL, parameterized queries | P0 | [#14](https://github.com/BroDep/baltiyskiy-bereg/issues/14) |
-| **F-005** | RAG Search | Поиск по тикетам и KB-статьям | P0 | [#15](https://github.com/BroDep/baltiyskiy-bereg/issues/15) |
-| **F-006** | Chat API | POST /api/chat с контекстом из RAG | P0 | [#16](https://github.com/BroDep/baltiyskiy-bereg/issues/16) |
+Для **каждой** задачи действует одинаковый pipeline:
 
----
+1. acceptance criteria;
+2. tests first;
+3. minimal implementation;
+4. all relevant tests green;
+5. reviewer / code review;
+6. PR в `dev`;
+7. VPS smoke verification.
 
-## Phase 2: Core Features
-
-| ID | Фича | Описание | Приоритет | Контракт |
-|----|------|---------|-----------|----------|
-| **F-010** | Ticket Classification | Предсказание Service/Type/Priority | P1 | [#17](https://github.com/BroDep/baltiyskiy-bereg/issues/17) |
-| **F-011** | Telegram Bot | Интеграция с Telegram Bot API | P1 | [#18](https://github.com/BroDep/baltiyskiy-bereg/issues/18) |
-| **F-012** | Response Caching | Кеширование ответов для скорости | P1 | [#19](https://github.com/BroDep/baltiyskiy-bereg/issues/19) |
-| **F-013** | Web UI | Swagger/OpenAPI + простой frontend | P2 | [#20](https://github.com/BroDep/baltiyskiy-bereg/issues/20) |
+Задача без этих шагов считается незавершённой.
 
 ---
 
-## Phase 3: Enhancement
+## Phase 0 — Foundation and Tooling
 
-| ID | Фича | Описание | Приоритет | Контракт |
-|----|------|---------|-----------|----------|
-| **F-020** | Admin Panel | Управление настройками | P2 | #issue |
-| **F-021** | Dashboard | Статистика запросов, качество ответов | P2 | #issue |
-| **F-022** | Max Integration | Бот для Max (ICQ) | P3 | #issue |
-| **F-023** | Bitrix24 Integration | Интеграция с Битрикс24 | P3 | #issue |
+### R-001. Docker / runtime foundation — GitHub issue #11
+- multi-stage Dockerfile;
+- `.dockerignore`;
+- рабочий container healthcheck без `curl`;
+- smoke сборка локально и на VPS.
 
----
+**DoD:** контейнер API собирается и перестаёт быть `unhealthy` из-за runtime image.
 
-## Phase 4: Production
+### R-002. Superpowers / agent tooling recovery — GitHub issue #24
+- зафиксировать и починить `skill loader` / `wasm-simd` blocker;
+- документировать fallback-процесс, если инструмент недоступен.
 
-| ID | Фича | Описание | Приоритет | Контракт |
-|----|------|---------|-----------|----------|
-| **F-030** | Authentication | OAuth/JWT для API | P2 | #issue |
-| **F-031** | Rate Limiting | Защита от спама | P2 | #issue |
-| **F-032** | Monitoring | Логи, метрики, алерты | P2 | #issue |
-| **F-033** | On-premise Deploy | Ansible/Helm для prod | P2 | #issue |
+**DoD:** агентные workflow либо работают, либо имеют формально описанный обходной путь.
 
----
+### R-003. CI / TDD / review gates — GitHub issue #23
+- убрать ложнозелёные проверки;
+- зафиксировать pipeline `tests -> code -> green -> review -> PR -> VPS smoke`;
+- встроить это в backlog и PR правила.
 
-## Future Ideas
-
-- [ ] Голосовой ввод (speech-to-text)
-- [ ] Многоязычность (английский для экспорта)
-- [ ] ML fine-tuning на исторических тикетах
-- [ ] Интеграция с IntraService API
-- [ ] A/B тестирование ответов
+**DoD:** ветка не считается готовой без зелёного quality gate.
 
 ---
 
-## Milestones
+## Phase 1 — Backend Skeleton
 
-| Milestone | Дата | Фичи |
-|-----------|------|------|
-| **v0.1.0** | Sprint 1 | F-001 → F-004 (Infrastructure) |
-| **v0.2.0** | Sprint 2 | F-005 → F-006 (Core Chat) |
-| **v0.3.0** | Sprint 3 | F-010 → F-012 (Telegram + Classification) |
-| **v1.0.0** | Хакатон | MVP готов к демо |
+### R-010. Application skeleton and config — GitHub issue #12
+- нормальная структура `src/`;
+- config/settings layer;
+- settings persistence для dashboard;
+- заготовка readiness/liveness.
+
+**DoD:** проект не является single-file stub и готов к расширению по слоям.
+
+### R-011. MSSQL read model and readiness — GitHub issue #14
+- read-only клиент для MSSQL;
+- базовые smoke запросы;
+- readiness checks на соединение.
+
+**DoD:** API умеет честно говорить, видит ли он source DB.
 
 ---
 
-## Tech Debt
+## Phase 2 — LLM Access and Dashboard API
 
-- [ ] Добавить pytest тесты
-- [ ] Добавить mypy type checking
-- [ ] Настроить pre-commit hooks
-- [ ] Добавить CI/CD healthchecks для API
+### R-020. YandexGPT request-response endpoint — GitHub issue #13
+- `POST /api/llm/generate`;
+- timeout / error handling;
+- mocked/integration tests.
+
+**DoD:** можно отправить prompt и получить ответ от YandexGPT через сервис.
+
+### R-021. Dashboard settings API — GitHub issue #19
+- `GET/PUT /api/admin/system-prompt`;
+- `GET/PUT /api/admin/llm-settings`;
+- сохранение между рестартами;
+- без auth на MVP-стенде.
+
+**DoD:** фронт/дашборд может читать и менять runtime настройки.
+
+---
+
+## Phase 3 — Knowledge Graph Platform
+
+### R-030. Neo4j graph+vector foundation — GitHub issue #15
+- docker/service setup для Neo4j;
+- schema, labels, relations;
+- vector + fulltext indexes.
+
+**DoD:** knowledge store поднят и готов принимать данные.
+
+### R-031. Scheduled sync from MSSQL/KB — GitHub issue #16
+- extractor / normalizer;
+- batch sync в Neo4j;
+- nightly schedule + manual run;
+- идемпотентность.
+
+**DoD:** source данные переносятся в graph/vector слой воспроизводимо.
+
+---
+
+## Phase 4 — Tool-enabled Assistant
+
+### R-040. Chat orchestration with tools — GitHub issue #17
+- `POST /api/chat`;
+- tool contracts для graph lookup;
+- сбор источников и context package;
+- ответ + citations / metadata.
+
+**DoD:** ответ строится не вслепую, а через retrieval tools.
+
+### R-041. Telegram polling worker — GitHub issue #18
+- `aiogram` polling worker;
+- вызов FastAPI вместо прямого доступа к данным;
+- retry / timeout / basic command set.
+
+**DoD:** Telegram пользователь получает ответ от backend pipeline.
+
+---
+
+## Phase 5 — Operations and Demo Readiness
+
+### R-050. Dashboard UI — GitHub issue #20
+- UI для system prompt;
+- UI для LLM settings;
+- минимум operational visibility для demo.
+
+**DoD:** настройки можно менять без ручного редактирования файлов/БД.
+
+### R-051. VPS smoke and release checklist — GitHub issue #23
+- post-merge smoke сценарий;
+- проверка API, DB, sync, Telegram worker;
+- фиксация результатов в PR/release notes.
+
+**DoD:** есть повторяемый способ доказать, что система жива на VPS.
+
+---
+
+## Priority Order
+
+1. R-001
+2. R-002
+3. R-003
+4. R-010
+5. R-011
+6. R-020
+7. R-021
+8. R-030
+9. R-031
+10. R-040
+11. R-041
+12. R-050
+13. R-051
+
+---
+
+## Stack Decisions Locked for MVP
+
+- **API:** FastAPI
+- **Telegram:** aiogram polling worker
+- **LLM:** YandexGPT
+- **Source DB:** MSSQL read-only
+- **Knowledge store:** Neo4j 5 with vector and fulltext indexes
+- **Settings store:** SQLite
