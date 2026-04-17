@@ -120,9 +120,13 @@ def generate_llm_response(
     )
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get(
+    "/health",
+    response_model=HealthResponse,
+    response_model_exclude_none=True,
+)
 def health() -> HealthResponse:
-    return HealthResponse()
+    return HealthResponse(status="ok")
 
 
 @router.get("/health/live", response_model=LiveResponse)

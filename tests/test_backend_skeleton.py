@@ -109,6 +109,24 @@ def test_app_factory_bootstraps_health_route_and_settings_repository(
     assert app.state.settings_repository.get_system_prompt().prompt
 
 
+def test_api_models_export_runtime_contract_types() -> None:
+    models_module = import_module("src.api.models")
+
+    required_symbols = [
+        "ChatErrorResponse",
+        "ChatSuccessResponse",
+        "GenerateErrorResponse",
+        "GenerateRequest",
+        "GenerateResponseMetadata",
+        "GenerateSuccessResponse",
+        "LiveResponse",
+        "ReadyResponse",
+    ]
+
+    for symbol in required_symbols:
+        assert getattr(models_module, symbol)
+
+
 def _build_repository(tmp_path: Path):
     database_module = import_module("src.database.client")
     settings_models = import_module("src.settings.models")
