@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 
 from src.config import AppConfig, load_config
 from src.telegram_worker.app import create_dispatcher
@@ -18,6 +20,12 @@ def configure_logging() -> None:
     )
 
 
+def create_bot_session() -> AiohttpSession:
+    session = AiohttpSession()
+    session._connector_init["family"] = socket.AF_INET
+    return session
+
+
 def build_runtime(config: AppConfig) -> tuple[Bot, Dispatcher, BackendChatClient]:
     if not config.telegram.bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured.")
@@ -28,7 +36,7 @@ def build_runtime(config: AppConfig) -> tuple[Bot, Dispatcher, BackendChatClient
     )
     chat_service = TelegramChatService(backend_client=backend_client)
     dispatcher = create_dispatcher(chat_service)
-    bot = Bot(token=config.telegram.bot_token)
+    bot = Bot(token=config.telegram.bot_token, session=create_bot_session())
     return bot, dispatcher, backend_client
 
 
