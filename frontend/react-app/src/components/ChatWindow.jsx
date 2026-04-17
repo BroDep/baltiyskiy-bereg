@@ -1,13 +1,35 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Message from './Message';
 
-export default function ChatWindow({ messages, isLoading, onSend }) {
-  const bottomRef = useRef(null);
+export default function ChatWindow({
+  messages,
+  isLoading,
+  onSend,
+  containerRef,
+  loadingHistory,
+  hasMoreHistory,
+  onScrollToTop,
+}) {
+  const bottomRef    = useRef(null);
   const [text, setText] = useState('');
+  const isAtBottom   = useRef(true);
 
+  // Auto-scroll to bottom only if already near bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isAtBottom.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, isLoading]);
+
+  function handleScroll(e) {
+    const el = e.currentTarget;
+    // Near bottom?
+    isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    // Near top → load older messages
+    if (el.scrollTop < 80 && !loadingHistory && hasMoreHistory) {
+      onScrollToTop?.();
+    }
+  }
 
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -20,14 +42,28 @@ export default function ChatWindow({ messages, isLoading, onSend }) {
     if (!text.trim() || isLoading) return;
     onSend(text);
     setText('');
+    isAtBottom.current = true;
   }
 
   return (
     <>
-      <div className="chat-window">
-        {messages.map((msg, i) => (
-          <Message key={i} role={msg.role} content={msg.content} meta={msg.meta} />
+      <div className="chat-window" ref={containerRef} onScroll={handleScroll}>
+
+        {/* Top history markers */}
+        {loadingHistory && (
+          <div className="chat-history-loading">
+            <span className="chat-history-spinner" />
+            Загрузка истории...
+          </div>
+        )}
+        {!loadingHistory && !hasMoreHistory && messages.length > 1 && (
+          <div className="chat-history-end">Начало истории</div>
+        )}
+
+        {messages.map(msg => (
+          <Message key={msg._id ?? msg.id} role={msg.role} content={msg.content} meta={msg.meta} />
         ))}
+
         {isLoading && (
           <div className="typing-indicator">
             <div className="typing-dot" />
@@ -37,6 +73,7 @@ export default function ChatWindow({ messages, isLoading, onSend }) {
         )}
         <div ref={bottomRef} />
       </div>
+
       <div className="message-input">
         <textarea
           className="message-input__textarea"
