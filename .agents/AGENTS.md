@@ -1,5 +1,14 @@
 # AGENTS.md — Baltiyskiy Bereg Service Desk Chatbot
 
+## ⚠️ Important: Read This First
+
+**On every session start, you MUST:**
+1. Read `.agents/index.md` — contains project overview (DB, CI/CD, architecture)
+2. Read this file (AGENTS.md) — contains coding guidelines
+3. When making changes, update `.agents/index.md` if needed
+
+---
+
 ## Project Overview
 
 LLM chatbot for the "Baltiyskiy Bereg" service desk. Connects to MSSQL database containing ~104,000 tickets and ~1,000 KB articles. Uses YandexGPT for LLM capabilities.
