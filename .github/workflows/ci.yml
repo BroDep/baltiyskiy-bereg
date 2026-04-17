@@ -45,4 +45,4 @@ jobs:
         with:
           context: .
           push: false
-          tags: ghcr.io/${{ github.repository_owner }}/baltiyskiy-bereg:${{ github.sha }}
+          tags: ghcr.io/brodep/baltiyskiy-bereg:${{ github.sha }}
