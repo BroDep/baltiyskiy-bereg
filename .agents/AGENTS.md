@@ -19,39 +19,62 @@ LLM chatbot for the "Baltiyskiy Bereg" service desk. Connects to MSSQL database 
 
 ## 🚀 Quick Start (For New Agent)
 
+### ⚠️ Important: You Have VPS Access!
+
+This project has a **VPS server** where the database and services run. You can connect to it to:
+- Query the MSSQL database directly
+- Check service status
+- View logs
+- Deploy changes
+
 ### What This Project Is
 - Service desk chatbot for "Балтийский Берег" (Baltic Bereg) — рыбоперерабатывающая компания
 - Чат-бот для поиска решений в IT-тикетах и базе знаний
 - Использует YandexGPT для генерации ответов
 
-### How to Connect to Server
+### VPS Server Access
 
-**VPS Server:**
+**IMPORTANT:** To work with this project, you need the SSH key.
+
+**SSH Key Location:** `~/.ssh/baltiyskiy_bereg_new`
+- If key doesn't exist, ask the project owner
+- Key is stored locally on the machine running this agent
+
+**Server Details:**
 ```
 Host: 111.88.159.116
 User: theimage01
+Port: 22 (default)
 SSH Key: ~/.ssh/baltiyskiy_bereg_new
 ```
 
+**Connect to VPS:**
 ```bash
 ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116
 ```
 
-**MSSQL Database:**
+**VPS Contains:**
+- MSSQL database with 104,395 tickets
+- Docker containers for services
+- Project code at `/home/theimage01/baltiyskiy-bereg/`
+
+### MSSQL Database Access
+
+**Direct from VPS:**
+```bash
+ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116 \
+  "docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
+   -S localhost -U SA -P 'SNdWoPBEUh8w9gD2Lfzr' \
+   -Q 'SELECT COUNT(*) FROM service_desk_tdbb.dbo.Task'"
+```
+
+**From your machine (requires port 1433 open):**
 ```
 Host: 111.88.159.116
 Port: 1433
 Database: service_desk_tdbb
 User: SA
 Password: SNdWoPBEUh8w9gD2Lfzr
-```
-
-Test connection:
-```bash
-ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116 \
-  "docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
-   -S localhost -U SA -P 'SNdWoPBEUh8w9gD2Lfzr' \
-   -Q 'SELECT COUNT(*) FROM service_desk_tdbb.dbo.Task'"
 ```
 
 ### What's in the Database
