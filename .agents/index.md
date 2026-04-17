@@ -25,6 +25,14 @@ baltiyskiy-bereg/
 │   ├── REQUIREMENTS.md
 │   └── ROADMAP.md
 ├── src/
+│   ├── api/
+│   ├── database/
+│   ├── models/
+│   ├── services/
+│   ├── settings/
+│   ├── config.py
+│   └── main.py
+├── tests/
 ├── data/
 ├── .github/
 ├── Dockerfile
@@ -47,6 +55,7 @@ baltiyskiy-bereg/
 | `telegram-worker` | polling bot, общается только с API |
 | `sync-worker` | scheduled sync из MSSQL/KB в Neo4j |
 | `settings storage` | persistence для system prompt и LLM settings |
+| `yandexgpt gateway` | request/response интеграция для `POST /api/llm/generate` |
 
 ---
 
@@ -100,6 +109,35 @@ docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
 - `PRD.md` — целевое ТЗ MVP
 - `.agents/REQUIREMENTS.md` — FR/NFR/AC
 - `.agents/ROADMAP.md` — delivery plan
+
+---
+
+## Implemented API Surface
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/chat` | POST | текущий typed stub-контракт chat endpoint |
+| `/api/llm/generate` | POST | минимальный YandexGPT request/response gateway |
+| `/health` | GET | process/container healthcheck for Docker runtime |
+| `/health/live` | GET | liveness probe |
+| `/health/ready` | GET | readiness probe scaffold |
+
+---
+
+## Environment Variables
+
+| Variable | Purpose |
+|---|---|
+| `MSSQL_HOST` / `MSSQL_PORT` / `MSSQL_DATABASE` / `MSSQL_USER` / `MSSQL_SA_PASSWORD` | read-only MSSQL connectivity |
+| `YANDEX_GPT_API_KEY` | YandexGPT API key |
+| `YANDEX_GPT_FOLDER_ID` | folder id for model URI |
+| `YANDEX_GPT_MODEL` | default model name for runtime settings |
+| `YANDEX_GPT_BASE_URL` | base URL for Yandex Foundation Models API |
+| `SETTINGS_DATABASE_PATH` | SQLite file path for runtime settings storage |
+| `DEFAULT_SYSTEM_PROMPT` | seeded system prompt value |
+| `LLM_TEMPERATURE` | default temperature for persisted LLM settings |
+| `LLM_MAX_TOKENS` | default max token limit |
+| `LLM_TIMEOUT_SECONDS` | default upstream timeout |
 
 ---
 
