@@ -1,203 +1,88 @@
 # Baltiyskiy Bereg — Service Desk AI Assistant
 
-![Hackathon](https://img.shields.io/badge/Hackathon-AI%20Business%20SPB%202026-blue)
-![Python](https://img.shields.io/badge/Python-3.11+-green)
-![MSSQL](https://img.shields.io/badge/MSSQL-2019-red)
-![YandexGPT](https://img.shields.io/badge/YandexGPT-LLM-orange)
+LLM-чатбот для сервис-деска «Балтийский Берег». Цель MVP — отвечать на вопросы сотрудников на основе MSSQL-истории тикетов и базы знаний, использовать YandexGPT для генерации и Neo4j как graph+vector knowledge store.
 
-LLM-чатбот для сервис-деска «Балтийский Берег». Помогает сотрудникам находить решения в истории тикетов и базе знаний.
+## Текущий статус
 
-## 🎯 О проекте
+- репозиторий пока находится в стадии foundation / starter;
+- VPS доступен по SSH;
+- MSSQL на VPS проверен: `Task = 104395`, `KBDocument = 1060`;
+- текущий код приложения пока реализует только базовый FastAPI health endpoint;
+- целевая архитектура и backlog теперь описаны в `PRD.md`, `.agents/REQUIREMENTS.md`, `.agents/ROADMAP.md`.
 
-**ООО «ТД «Балтийский Берег»** — один из крупнейших производителей рыбной продукции в России. Более 350 наименований, ~1000 сотрудников.
+## Целевой MVP
 
-**Проблема:** Отсутствует структурированная база знаний. Вся экспертиза — в исторических тикетах (~104 000) и статьях (~1 060).
+1. **FastAPI backend** с доступом к YandexGPT в формате request → response.
+2. **Telegram bot на polling**, который общается с FastAPI, а не с БД напрямую.
+3. **Dashboard API** для управления системным промптом и LLM-настройками без auth на MVP-этапе.
+4. **Scheduled sync** из MSSQL/KB в graph+vector knowledge store.
+5. **Tool-enabled chat orchestration**: перед финальным ответом LLM уточняет контекст через контролируемые инструменты поиска в knowledge store.
 
-**Решение:** LLM-бот, который ищет релевантные решения и отвечает на вопросы сотрудников.
+## Архитектурные решения
 
-## 🚀 Быстрый старт
+| Область | Решение |
+|---|---|
+| Web API | FastAPI |
+| LLM | YandexGPT |
+| Source of truth | MSSQL (read-only) |
+| Graph + vector store | Neo4j 5 + vector/fulltext indexes |
+| Telegram transport | Polling worker на `aiogram` |
+| Runtime settings | SQLite / локальное settings storage для dashboard |
+| Orchestration | Server-side tool loop, а не прямой доступ LLM к БД |
 
-### 1. Клонирование и настройка
+## Документы проекта
+
+- `PRD.md` — нормализованное ТЗ / продуктовая и техническая рамка MVP.
+- `.agents/REQUIREMENTS.md` — формализованные FR/NFR/AC.
+- `.agents/ROADMAP.md` — поэтапный delivery plan и quality gates.
+- `.agents/AGENTS.md` — правила для AI-агентов.
+
+## Текущие endpoints
+
+### Реально реализованы сейчас
+
+| Endpoint | Method | Назначение |
+|---|---|---|
+| `/` | GET | stub-ответ сервиса |
+| `/health` | GET | базовый health check |
+
+### Запланированы в MVP
+
+| Endpoint | Method | Назначение |
+|---|---|---|
+| `/api/llm/generate` | POST | простой запрос к YandexGPT |
+| `/api/chat` | POST | chat orchestration с retrieval/tools |
+| `/api/admin/system-prompt` | GET / PUT | чтение и обновление системного промпта |
+| `/api/admin/llm-settings` | GET / PUT | чтение и обновление runtime LLM settings |
+| `/health/live` | GET | liveness |
+| `/health/ready` | GET | readiness по MSSQL / YandexGPT / Neo4j |
+
+## Быстрый старт
 
 ```bash
-git clone https://github.com/BroDep/baltiyskiy-bereg.git
-cd baltiyskiy-bereg
-
 cp .env.example .env
-# Заполните .env (см. секцию Configuration)
-```
-
-### 2. Запуск
-
-```bash
-# Запуск всех сервисов
-docker compose up -d
-
-# Проверка статуса
-docker compose ps
-
-# Просмотр логов
-docker compose logs -f api
-```
-
-### 3. Проверка
-
-```bash
-# Health check
+docker compose up --build
 curl http://localhost:8000/health
-
-# Тестовый запрос к API
-curl http://localhost:8000/
 ```
 
-## 📁 Структура проекта
+## Docker
 
-```
-baltiyskiy-bereg/
-├── src/                    # Исходный код приложения
-│   └── main.py             # FastAPI entry point
-├── data/                   # Дампы БД (не в гите)
-├── docker-compose.yml      # Docker services
-├── Dockerfile              # App container
-├── pyproject.toml          # Python dependencies
-├── restore-db.sh           # Скрипт восстановления БД
-└── .agents/                # Документация для AI-агентов
-    ├── AGENTS.md           # Гайдлайны для агентов
-    ├── index.md            # Обзор проекта
-    └── skills/             # Reusable skills
-```
+Используется multi-stage build с `uv sync` и уменьшенным build context через `.dockerignore`.
+Healthcheck API не зависит от `curl` внутри контейнера и выполняется через встроенный Python runtime.
 
-## ⚙️ Configuration
+## Правило разработки
 
-Скопируйте `.env.example` в `.env` и заполните:
+Для каждой фичи workflow обязателен:
 
-```bash
-# API-ключ хакатона (platform.ai-business-spb.ru)
-API_KEY=your-team-api-key
+1. сначала тесты / контракт / acceptance criteria;
+2. потом минимальная реализация;
+3. потом локально все тесты зелёные;
+4. потом code review / reviewer;
+5. потом PR в `dev`;
+6. потом smoke / manual verification на VPS.
 
-# MSSQL Database
-MSSQL_SA_PASSWORD=YourStrong!Pass123
-MSSQL_HOST=localhost
-MSSQL_PORT=1433
-MSSQL_DATABASE=service_desk_tdbb
-MSSQL_USER=SA
+## Ссылки
 
-# YandexGPT
-YANDEX_GPT_API_KEY=your-api-key
-YANDEX_GPT_FOLDER_ID=your-folder-id
-YANDEX_GPT_MODEL=yandexgpt/latest
-```
-
-### Получение API-ключа YandexGPT
-
-1. [Yandex Cloud Console](https://console.yandex.cloud/)
-2. Создайте сервисный аккаунт с ролью `ai.languageModels.user`
-3. Создайте API-ключ
-4. Скопируйте `folder_id` и ключ в `.env`
-
-## 🗄️ База данных
-
-### Схема
-
-| Таблица | Строк | Описание |
-|---------|-------|---------|
-| `Task` | 104 395 | Тикеты (Name, Description, Comment HTML) |
-| `KBDocument` | 1 060 | Статьи базы знаний |
-| `TaskFieldValues` | — | Custom-поля |
-| `TaskExpenses` | — | Трудозатраты |
-| `Service`, `TaskType`, `Status`, `Priority` | — | Lookup-таблицы |
-
-### Ключевые поля Task
-
-- `Name` — краткое название
-- `Description` — описание
-- `Comment` — **HTML Q&A переписка** (главный источник для RAG)
-- `StatusId`, `ServiceId`, `TypeId` — категоризация
-
-### Загрузка данных
-
-```bash
-# Через curl
-curl -H "X-API-Key: YOUR_API_KEY" \
-     https://data.ai-business-spb.ru/data/baltiyskiy-bereg/cleaned.bak \
-     -o data/cleaned.bak
-```
-
-## 🔧 API Endpoints
-
-| Endpoint | Method | Описание |
-|----------|--------|----------|
-| `/` | GET | Информация о сервисе |
-| `/health` | GET | Health check |
-| `/api/search` | POST | Поиск по тикетам и KB |
-| `/api/chat` | POST | Chat с ботом |
-| `/api/classify` | POST | Классификация заявки |
-
-## 📊 Требования
-
-### Performance
-
-| Метрика | Значение |
-|---------|---------|
-| Время ответа | ≤ 30 сек |
-| Нагрузка | 30–50 запросов/сутки |
-| Автоматизация | ≥ 50% запросов |
-
-### Deployment
-
-- **Пилот:** SaaS
-- **Продуктив:** On-premise (Docker)
-
-### Интеграции (вне MVP)
-
-- Telegram Bot
-- Max (ICQ)
-- Битрикс24
-
-## 🧪 Тестирование
-
-```bash
-# Установка зависимостей
-uv sync
-
-# Линтинг
-uv run ruff check .
-
-# Тесты (когда будут)
-uv run pytest
-
-# Полная проверка
-uv run ruff check . && uv run pytest
-```
-
-## 📈 Roadmap
-
-- [x] Starter project setup
-- [x] CI/CD pipeline
-- [ ] YandexGPT integration
-- [ ] RAG search по тикетам
-- [ ] Telegram bot
-- [ ] Классификация заявок
-- [ ] Admin panel
-- [ ] Dashboard
-
-## 👥 Команда
-
-**Контакты:** www.sooskolkos@gmail.com
-
-**GitHub:** https://github.com/BroDep/baltiyskiy-bereg
-
-**Платформа:** https://app.ai-business-spb.ru
-
-## 📄 License
-
-MIT
-
-## 🏆 Критерии оценки (хакатон)
-
-| Критерий | Описание |
-|----------|---------|
-| Техническая реализация | Бот работает, ≤30 сек, корректный ввод |
-| Бизнес-ценность | ≤50% эскалаций |
-| Готовность | README, инструкция запуска |
-| Инновационность | Подход к извлечению знаний из 104K тикетов |
+- GitHub: https://github.com/BroDep/baltiyskiy-bereg
+- VPS: `111.88.159.116`
+- Платформа: https://app.ai-business-spb.ru

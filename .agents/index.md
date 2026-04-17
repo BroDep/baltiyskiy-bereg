@@ -2,9 +2,16 @@
 
 ## Project Overview
 
-LLM chatbot for the "Baltiyskiy Bereg" service desk. Connects to MSSQL database containing **104,395 tickets** and **1,060 KB articles**. Uses YandexGPT for LLM capabilities.
+Внутренний LLM-ассистент для сервис-деска «Балтийский Берег».
+Source of truth — MSSQL с историческими тикетами и KB, целевая архитектура MVP — FastAPI + YandexGPT + Neo4j graph/vector knowledge store + Telegram polling worker.
 
-**Stack:** Python 3.11+, MSSQL, Docker, YandexGPT (OpenAI-compatible API)
+**Проверенные факты окружения:**
+
+- VPS доступен по SSH;
+- MSSQL на VPS отвечает;
+- подтверждённые объёмы данных: `Task = 104395`, `KBDocument = 1060`.
+
+**Locked stack for MVP:** Python 3.11+, FastAPI, MSSQL, Neo4j 5, Docker, YandexGPT, aiogram.
 
 ---
 
@@ -12,111 +19,91 @@ LLM chatbot for the "Baltiyskiy Bereg" service desk. Connects to MSSQL database 
 
 ```
 baltiyskiy-bereg/
-├── .agents/              # Agent documentation (this folder)
-│   ├── index.md          # This file - project overview
-│   ├── AGENTS.md         # Coding guidelines for AI agents
-│   ├── REQUIREMENTS.md   # Project requirements (TODO)
-│   └── ROADMAP.md       # Development roadmap (TODO)
-├── src/                  # Application source code
-├── tests/                # Test files
-├── data/                 # Database backup files
-├── .github/              # GitHub Actions workflows
-├── docker-compose.yml    # Docker services definition
-├── pyproject.toml        # Python dependencies
-└── README.md            # Project documentation
+├── .agents/
+│   ├── index.md
+│   ├── AGENTS.md
+│   ├── REQUIREMENTS.md
+│   └── ROADMAP.md
+├── src/
+├── data/
+├── .github/
+├── Dockerfile
+├── .dockerignore
+├── docker-compose.yml
+├── pyproject.toml
+├── README.md
+└── PRD.md
 ```
 
 ---
 
-## Database
+## Active MVP Architecture
 
-**Server:** `111.88.159.116:1433`  
-**Database:** `service_desk_tdbb`  
-**User:** `SA`
-
-### Key Tables
-
-| Table | Description | Row Count |
-|-------|-------------|-----------|
-| `Task` | Service desk tickets with Q&A | 104,395 |
-| `KBDocument` | Knowledge base articles | 1,060 |
-| `TaskFieldValues` | Custom field values | — |
-| `TaskExpenses` | Work time records | — |
-| `Service`, `Status`, `Priority` | Lookup tables | — |
-
-### Ticket Structure
-- **Name** — short title
-- **Description** — detailed description
-- **Comment** — HTML Q&A conversation between user and support
-- **StatusId, ServiceId, TypeId** — categories
+| Component | Role |
+|---|---|
+| `api` | FastAPI backend, orchestration, admin settings endpoints |
+| `mssql` | source database, read-only queries |
+| `neo4j` | graph + vector knowledge store |
+| `telegram-worker` | polling bot, общается только с API |
+| `sync-worker` | scheduled sync из MSSQL/KB в Neo4j |
+| `settings storage` | persistence для system prompt и LLM settings |
 
 ---
 
-## CI/CD
+## Data Sources
 
-### GitHub Actions
+| Table | Purpose | Row Count |
+|---|---|---|
+| `Task` | сервис-деск тикеты | 104,395 |
+| `KBDocument` | статьи базы знаний | 1,060 |
+| `TaskFieldValues` | дополнительные поля тикетов | — |
+| `TaskExpenses` | worklog / трудозатраты | — |
+| `Service`, `TaskType`, `Priority`, `Status` | lookup-справочники | — |
 
-| Workflow | Trigger | Description |
-|----------|---------|-------------|
-| **CI** | Push to `main` or `dev` | Linting, syntax check |
-| **CD** | Push to `dev` | Deploy to VPS |
+---
 
-### Deploy Pipeline
+## Delivery Rules
 
-1. CI checks code quality
-2. CD pulls latest code to `111.88.159.116`
-3. If `Dockerfile` exists → rebuilds containers
-4. Starts services with `docker compose`
-5. Health check validates MSSQL connection
+Каждая фича обязана идти через процесс:
 
-### Server Access
+`tests first -> implementation -> green tests -> review -> PR -> VPS smoke`
+
+Это правило относится и к Docker/infra задачам, и к application feature work.
+
+---
+
+## CI/CD and VPS
+
+### VPS
 
 ```
 Host: 111.88.159.116
 User: theimage01
-SSH Key: ~/.ssh/baltiyskiy_bereg_new
+SSH key: ~/.ssh/baltiyskiy_bereg_new
 ```
 
-**SSH Connection:**
+### Проверочные команды
+
 ```bash
 ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116
-```
-
-**Useful Commands:**
-```bash
-# Check containers
 docker ps
-
-# View logs
-docker compose logs --tail=50
-
-# Restart services
-docker compose down && docker compose up -d
-
-# Connect to MSSQL
-docker exec -it mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
-  -S localhost -U SA -P '$MSSQL_SA_PASSWORD' \
+docker logs api-baltbereg --tail=50
+docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
+  -S localhost -U SA -P "$MSSQL_SA_PASSWORD" \
   -Q 'SELECT COUNT(*) FROM service_desk_tdbb.dbo.Task'
 ```
 
 ---
 
-## Contributing
+## Key Documents
 
-Contributions are welcome! Please contact **www.sooskolkos@gmail.com** for collaboration.
-
-### Before Adding New Module
-
-When adding a new module or service:
-1. Read `.agents/AGENTS.md` for coding guidelines
-2. Update this `index.md` in the appropriate section
-3. Document new environment variables in `.env.example`
-4. Add new tables/fields to Database section if applicable
+- `PRD.md` — целевое ТЗ MVP
+- `.agents/REQUIREMENTS.md` — FR/NFR/AC
+- `.agents/ROADMAP.md` — delivery plan
 
 ---
 
-## Links
+## Known Blockers
 
-- **GitHub:** https://github.com/BroDep/baltiyskiy-bereg
-- **VPS:** 111.88.159.116
-- **API Key Contact:** www.sooskolkos@gmail.com
+- `superpowers` / skill loader сейчас падает с ошибкой `wasm-simd is not enabled`;
+- текущий сервис в runtime был `unhealthy`, потому что healthcheck использовал `curl`, которого не было в image.
