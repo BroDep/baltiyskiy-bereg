@@ -5,7 +5,30 @@
 **On every session start, you MUST:**
 1. Read `.agents/index.md` — contains project overview (DB, CI/CD, architecture)
 2. Read this file (AGENTS.md) — contains coding guidelines
-3. When making changes, update `.agents/index.md` if needed
+3. Check `.agents/skills/` for relevant skills
+
+---
+
+## 🛠️ Skills
+
+Skills are reusable instruction sets for common tasks. See `.agents/skills/README.md` for how to use and create skills.
+
+**When using a skill:**
+- Load it before performing the task
+- After completing, improve it if needed
+- Commit improvements to the skill
+
+**Self-Improvement Protocol:**
+```
+1. Use skill as written
+2. Note what was confusing/missing
+3. Update skill with improvements
+4. Commit changes
+```
+
+**Available Skills:**
+- `.agents/skills/README.md` — How to create skills
+- `.agents/skills/templates/skill-template.md` — Skill template
 
 ---
 
@@ -14,6 +37,107 @@
 LLM chatbot for the "Baltiyskiy Bereg" service desk. Connects to MSSQL database containing ~104,000 tickets and ~1,000 KB articles. Uses YandexGPT for LLM capabilities.
 
 **Stack:** Python 3.11+, MSSQL, Docker, YandexGPT (OpenAI-compatible API)
+
+---
+
+## 🚀 Quick Start (For New Agent)
+
+### ⚠️ Important: You Have VPS Access!
+
+This project has a **VPS server** where the database and services run. You can connect to it to:
+- Query the MSSQL database directly
+- Check service status
+- View logs
+- Deploy changes
+
+### What This Project Is
+- Service desk chatbot for "Балтийский Берег" (Baltic Bereg) — рыбоперерабатывающая компания
+- Чат-бот для поиска решений в IT-тикетах и базе знаний
+- Использует YandexGPT для генерации ответов
+
+### VPS Server Access
+
+**IMPORTANT:** To work with this project, you need the SSH key.
+
+**SSH Key Location:** `~/.ssh/baltiyskiy_bereg_new`
+- If key doesn't exist, ask the project owner
+- Key is stored locally on the machine running this agent
+
+**Server Details:**
+```
+Host: 111.88.159.116
+User: theimage01
+Port: 22 (default)
+SSH Key: ~/.ssh/baltiyskiy_bereg_new
+```
+
+**Connect to VPS:**
+```bash
+ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116
+```
+
+**VPS Contains:**
+- MSSQL database with 104,395 tickets
+- Docker containers for services
+- Project code at `/home/theimage01/baltiyskiy-bereg/`
+
+### MSSQL Database Access
+
+**Direct from VPS:**
+```bash
+ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116 \
+  "docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
+   -S localhost -U SA -P \"$MSSQL_SA_PASSWORD\" \
+   -Q 'SELECT COUNT(*) FROM service_desk_tdbb.dbo.Task'"
+```
+
+**From your machine (requires port 1433 open):**
+```
+Host: 111.88.159.116
+Port: 1433
+Database: service_desk_tdbb
+User: SA
+Password: (use value from .env or ask project owner)
+```
+
+### What's in the Database
+
+| Data | Count | Description |
+|------|-------|-------------|
+| **Tickets (Task)** | 104,395 | Заявки в IT-службу: гашение ВСД, работа в 1С, закупки, логистика |
+| **KB Articles (KBDocument)** | 1,060 | База знаний с инструкциями |
+| **TaskExpenses** | — | Записи о трудозатратах |
+| **TaskFieldValues** | — | Дополнительные поля |
+
+**Ticket Structure:**
+- `Name` — краткое название проблемы
+- `Description` — описание
+- `Comment` — HTML-переписка Q&A между сотрудником и поддержкой
+- `StatusId`, `ServiceId`, `TypeId` — категории и статусы
+
+### Useful Commands on Server
+
+```bash
+# Check containers
+docker ps
+
+# View MSSQL logs
+docker logs mssql-baltbereg --tail=20
+
+# Query database
+docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
+  -S localhost -U SA -P "$MSSQL_SA_PASSWORD" \
+  -Q 'SELECT TOP 5 Name FROM service_desk_tdbb.dbo.Task'
+
+# Restart MSSQL
+docker restart mssql-baltbereg
+```
+
+### CI/CD Pipeline
+
+- **CI** — runs on every push to `main`/`dev` (linting)
+- **CD** — deploys to VPS on push to `dev`
+- No direct pushes allowed — use PR from `feature/*` branch
 
 ---
 
