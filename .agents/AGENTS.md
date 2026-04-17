@@ -96,7 +96,41 @@ uv run pre-commit run --all-files
 
 ## Contributing
 
-Contributions are welcome! Please contact **www.sooskolkos@gmail.com** for collaboration details.
+### Git Flow
+
+We use **Git Flow** workflow:
+
+1. **Create feature branch** from `dev`:
+   ```bash
+   git checkout dev
+   git pull origin dev
+   git checkout -b feature/my-feature
+   ```
+
+2. **Make changes** and commit:
+   ```bash
+   git add .
+   git commit -m "feat: add new feature"
+   ```
+
+3. **Push and create Pull Request**:
+   ```bash
+   git push origin feature/my-feature
+   ```
+   Then create PR on GitHub → target: `dev`
+
+4. **After PR merged** — branch is auto-deleted
+
+### Rules
+- Never commit directly to `main` or `dev`
+- One feature = one PR
+- PR must pass CI checks
+- Write clear commit messages (conventional commits)
+
+### Code Review
+- All changes require review before merge
+- Address feedback in the same branch
+- Squash commits if needed before merge
 
 ---
 
