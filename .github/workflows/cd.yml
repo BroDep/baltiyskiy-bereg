@@ -31,23 +31,19 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOF'
             cd baltiyskiy-bereg
-            
-            # Pull latest changes
             git pull origin dev
-            
-            # Build and start services
             docker compose down
-            docker compose build --no-cache
             docker compose up -d
-            
-            # Show logs
-            docker compose logs --tail=20
+            docker ps
           EOF
 
       - name: Health check
         run: |
-          sleep 10
-          curl -f http://${{ vars.SERVER_HOST }}:8000/health || exit 1
+          sleep 15
+          ssh -o StrictHostKeyChecking=no ${{ vars.SERVER_USER }}@${{ vars.SERVER_HOST }} \
+            "docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
+             -S localhost -U SA -P '${{ secrets.MSSQL_PASSWORD }}' \
+             -Q 'SELECT COUNT(*) FROM service_desk_tdbb.dbo.Task' -h -1"
 
   notify:
     needs: deploy
