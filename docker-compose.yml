@@ -22,6 +22,15 @@ services:
     build: .
     container_name: api-baltbereg
     restart: unless-stopped
+    environment:
+      - MSSQL_HOST=mssql
+      - MSSQL_PORT=1433
+      - MSSQL_DATABASE=service_desk_tdbb
+      - MSSQL_USER=SA
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
+      - YANDEX_GPT_API_KEY=${YANDEX_GPT_API_KEY}
+      - YANDEX_GPT_FOLDER_ID=${YANDEX_GPT_FOLDER_ID}
+      - YANDEX_GPT_MODEL=${YANDEX_GPT_MODEL:-yandexgpt/latest}
     ports:
       - "8000:8000"
     healthcheck:
@@ -29,6 +38,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    depends_on:
+      mssql:
+        condition: service_healthy
 
 volumes:
   mssql-data:
