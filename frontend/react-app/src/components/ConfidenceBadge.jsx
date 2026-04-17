@@ -1,12 +1,12 @@
-// TODO: Бейдж уверенности модели
-//
-// Props:
-//   label: "high" | "medium" | "low"
-//   score: number  (0–10)
-//
-// Отображение:
-//   high   → зелёный фон, текст «Высокая уверенность (N/10)»
-//   medium → жёлтый фон, текст «Средняя уверенность (N/10)»
-//   low    → красный фон, текст «Низкая уверенность (N/10)»
-//
-// Стили через CSS-классы или inline, без внешних UI-библиотек
+import React from 'react';
+
+const LABELS = { high: 'Высокая уверенность', medium: 'Средняя уверенность', low: 'Низкая уверенность' };
+
+export default function ConfidenceBadge({ label, score }) {
+  const level = label === 'high' ? 'high' : label === 'medium' ? 'medium' : 'low';
+  return (
+    <span className={`confidence-badge confidence-badge--${level}`}>
+      {LABELS[level]} ({score}/10)
+    </span>
+  );
+}

@@ -1,13 +1,29 @@
-// TODO: Раскрывающийся список источников под ответом ассистента
-//
-// Props:
-//   sources: Array<{ title, excerpt, score, ticket_id?, kb_doc_id? }>
-//
-// Логика:
-//   - По умолчанию свёрнут (details/summary или собственный аккордеон)
-//   - Заголовок: «Источники (N)»
-//   - Для каждого источника показать:
-//     · Метку: «Тикет #ID» или «KB #ID»
-//     · Название (title)
-//     · Релевантность (score, округлить до 2 знаков)
-//     · Отрывок текста (excerpt) — серым цветом, меньшим шрифтом
+import React from 'react';
+
+export default function SourceList({ sources }) {
+  if (!sources?.length) return null;
+
+  return (
+    <details className="source-list">
+      <summary>Источники ({sources.length})</summary>
+      <div className="source-list__items">
+        {sources.map((src, i) => {
+          const isTicket = src.ticket_id != null;
+          const id = isTicket ? src.ticket_id : src.kb_doc_id;
+          return (
+            <div key={i} className="source-item">
+              <div className="source-item__header">
+                <span className={`source-badge source-badge--${isTicket ? 'ticket' : 'kb'}`}>
+                  {isTicket ? `Тикет #${id}` : `KB #${id}`}
+                </span>
+                <span className="source-item__title">{src.title}</span>
+                <span className="source-item__score">{src.score.toFixed(2)}</span>
+              </div>
+              {src.excerpt && <div className="source-item__excerpt">{src.excerpt}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
