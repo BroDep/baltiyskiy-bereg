@@ -16,6 +16,7 @@ dependencies = [
     "qdrant-client>=1.9",
     "flask>=3.0",
     "sqlalchemy>=2.0",
+    "aiogram>=3.27.0",
 ]
 
 [dependency-groups]

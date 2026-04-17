@@ -42,5 +42,18 @@ services:
       mssql:
         condition: service_healthy
 
+  telegram-worker:
+    build: .
+    container_name: telegram-worker-baltbereg
+    restart: unless-stopped
+    command: ["python", "-m", "src.telegram_worker.main"]
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env}
+      - BACKEND_API_BASE_URL=${BACKEND_API_BASE_URL:-http://api:8000}
+      - API_TIMEOUT_SECONDS=${API_TIMEOUT_SECONDS:-15}
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   mssql-data:
