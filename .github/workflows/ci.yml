@@ -29,7 +29,8 @@ jobs:
 
       - name: Run type check
         run: |
-          if find . -name "*.py" | grep -q .; then
+          shopt -s globstar nullglob
+          if compgen -G "**/*.py" > /dev/null; then
             uv run mypy .
           else
             echo "No Python files to check"
@@ -37,7 +38,8 @@ jobs:
 
       - name: Run tests
         run: |
-          if find . -name "test_*.py" -o -name "*_test.py" | grep -q .; then
+          shopt -s globstar nullglob
+          if compgen -G "**/test_*.py" > /dev/null || compgen -G "**/*_test.py" > /dev/null; then
             uv run pytest --cov=src --cov-report=xml
           else
             echo "No tests found"
