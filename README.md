@@ -7,7 +7,7 @@ LLM-чатбот для сервис-деска «Балтийский Бере�
 - репозиторий пока находится в стадии foundation / starter;
 - VPS доступен по SSH;
 - MSSQL на VPS проверен: `Task = 104395`, `KBDocument = 1060`;
-- текущий код приложения пока реализует только базовый FastAPI health endpoint;
+- текущий backend теперь реализует контрактный FastAPI skeleton для `/api/chat`, `/health/live` и `/health/ready`;
 - целевая архитектура и backlog теперь описаны в `PRD.md`, `.agents/REQUIREMENTS.md`, `.agents/ROADMAP.md`.
 
 ## Целевой MVP
@@ -44,31 +44,46 @@ LLM-чатбот для сервис-деска «Балтийский Бере�
 | Endpoint | Method | Назначение |
 |---|---|---|
 | `/` | GET | stub-ответ сервиса |
-| `/health` | GET | базовый health check |
+| `/api/chat` | POST | typed chat contract with deterministic stub response and controlled failure shape |
+| `/health/live` | GET | process liveness |
+| `/health/ready` | GET | readiness based on internal dependency probe abstraction |
 
 ### Запланированы в MVP
 
 | Endpoint | Method | Назначение |
 |---|---|---|
 | `/api/llm/generate` | POST | простой запрос к YandexGPT |
-| `/api/chat` | POST | chat orchestration с retrieval/tools |
 | `/api/admin/system-prompt` | GET / PUT | чтение и обновление системного промпта |
 | `/api/admin/llm-settings` | GET / PUT | чтение и обновление runtime LLM settings |
-| `/health/live` | GET | liveness |
-| `/health/ready` | GET | readiness по MSSQL / YandexGPT / Neo4j |
+
+## Contract notes for `/api/chat`
+
+- request body requires `message` and may include `correlation_id`, `user_id`, and `source`;
+- success response keeps a stable plain-text shape: `status=ok`, `response_text`, `correlation_id`;
+- controlled failure currently uses the sentinel message `__force_chat_failure__` and returns `503` with `status=error`, `error_code=CHAT_UNAVAILABLE`, a short user-facing message, and `correlation_id`;
+- readiness degradation returns `503` with a dependency summary and no stack traces.
 
 ## Быстрый старт
 
 ```bash
-cp .env.example .env
-docker compose up --build
-curl http://localhost:8000/health
+uv sync --dev
+uv run pytest tests/test_api_contract.py
+uv run uvicorn src.main:app --reload
+curl http://localhost:8000/health/live
+curl http://localhost:8000/health/ready
 ```
 
 ## Docker
 
 Используется multi-stage build с `uv sync` и уменьшенным build context через `.dockerignore`.
 Healthcheck API не зависит от `curl` внутри контейнера и выполняется через встроенный Python runtime.
+
+## Verification
+
+```bash
+pytest tests/test_api_contract.py
+python -m pytest tests/test_api_contract.py -q
+```
 
 ## Правило разработки
 
