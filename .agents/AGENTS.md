@@ -5,7 +5,30 @@
 **On every session start, you MUST:**
 1. Read `.agents/index.md` — contains project overview (DB, CI/CD, architecture)
 2. Read this file (AGENTS.md) — contains coding guidelines
-3. When making changes, update `.agents/index.md` if needed
+3. Check `.agents/skills/` for relevant skills
+
+---
+
+## 🛠️ Skills
+
+Skills are reusable instruction sets for common tasks. See `.agents/skills/README.md` for how to use and create skills.
+
+**When using a skill:**
+- Load it before performing the task
+- After completing, improve it if needed
+- Commit improvements to the skill
+
+**Self-Improvement Protocol:**
+```
+1. Use skill as written
+2. Note what was confusing/missing
+3. Update skill with improvements
+4. Commit changes
+```
+
+**Available Skills:**
+- `.agents/skills/README.md` — How to create skills
+- `.agents/skills/templates/skill-template.md` — Skill template
 
 ---
 
