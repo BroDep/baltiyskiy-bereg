@@ -12,3 +12,4 @@ conversation.jsonl
 dist/
 build/
 *.egg-info/
+opencode.json
