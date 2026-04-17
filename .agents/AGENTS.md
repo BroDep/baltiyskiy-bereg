@@ -17,6 +17,84 @@ LLM chatbot for the "Baltiyskiy Bereg" service desk. Connects to MSSQL database 
 
 ---
 
+## 🚀 Quick Start (For New Agent)
+
+### What This Project Is
+- Service desk chatbot for "Балтийский Берег" (Baltic Bereg) — рыбоперерабатывающая компания
+- Чат-бот для поиска решений в IT-тикетах и базе знаний
+- Использует YandexGPT для генерации ответов
+
+### How to Connect to Server
+
+**VPS Server:**
+```
+Host: 111.88.159.116
+User: theimage01
+SSH Key: ~/.ssh/baltiyskiy_bereg_new
+```
+
+```bash
+ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116
+```
+
+**MSSQL Database:**
+```
+Host: 111.88.159.116
+Port: 1433
+Database: service_desk_tdbb
+User: SA
+Password: SNdWoPBEUh8w9gD2Lfzr
+```
+
+Test connection:
+```bash
+ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116 \
+  "docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
+   -S localhost -U SA -P 'SNdWoPBEUh8w9gD2Lfzr' \
+   -Q 'SELECT COUNT(*) FROM service_desk_tdbb.dbo.Task'"
+```
+
+### What's in the Database
+
+| Data | Count | Description |
+|------|-------|-------------|
+| **Tickets (Task)** | 104,395 | Заявки в IT-службу: гашение ВСД, работа в 1С, закупки, логистика |
+| **KB Articles (KBDocument)** | 1,060 | База знаний с инструкциями |
+| **TaskExpenses** | — | Записи о трудозатратах |
+| **TaskFieldValues** | — | Дополнительные поля |
+
+**Ticket Structure:**
+- `Name` — краткое название проблемы
+- `Description` — описание
+- `Comment` — HTML-переписка Q&A между сотрудником и поддержкой
+- `StatusId`, `ServiceId`, `TypeId` — категории и статусы
+
+### Useful Commands on Server
+
+```bash
+# Check containers
+docker ps
+
+# View MSSQL logs
+docker logs mssql-baltbereg --tail=20
+
+# Query database
+docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
+  -S localhost -U SA -P 'SNdWoPBEUh8w9gD2Lfzr' \
+  -Q 'SELECT TOP 5 Name FROM service_desk_tdbb.dbo.Task'
+
+# Restart MSSQL
+docker restart mssql-baltbereg
+```
+
+### CI/CD Pipeline
+
+- **CI** — runs on every push to `main`/`dev` (linting)
+- **CD** — deploys to VPS on push to `dev`
+- No direct pushes allowed — use PR from `feature/*` branch
+
+---
+
 ## Build / Run / Test Commands
 
 ### Setup
