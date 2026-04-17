@@ -19,6 +19,9 @@ def test_load_config_reads_defaults_and_env_overrides(tmp_path: Path) -> None:
             "LLM_MAX_TOKENS": "256",
             "LLM_TIMEOUT_SECONDS": "12.5",
             "MSSQL_HOST": "mssql.internal",
+            "TELEGRAM_BOT_TOKEN": "test-telegram-token",
+            "BACKEND_API_BASE_URL": "http://api.internal:8000",
+            "API_TIMEOUT_SECONDS": "9.5",
         }
     )
 
@@ -31,6 +34,9 @@ def test_load_config_reads_defaults_and_env_overrides(tmp_path: Path) -> None:
     assert config.default_llm_settings.timeout_seconds == 12.5
     assert config.mssql.host == "mssql.internal"
     assert config.mssql.read_only is True
+    assert config.telegram.bot_token == "test-telegram-token"
+    assert config.telegram.backend_api_base_url == "http://api.internal:8000"
+    assert config.telegram.api_timeout_seconds == 9.5
 
 
 def test_sqlite_repository_returns_seeded_system_prompt(tmp_path: Path) -> None:

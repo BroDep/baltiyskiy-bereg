@@ -69,8 +69,28 @@ LLM-чатбот для сервис-деска «Балтийский Бере�
 uv sync --dev
 uv run pytest tests/test_api_contract.py
 uv run uvicorn src.main:app --reload
+uv run python -m src.telegram_worker.main
 curl http://localhost:8000/health/live
 curl http://localhost:8000/health/ready
+```
+
+## Telegram worker
+
+Минимальный polling worker запускается отдельно от FastAPI и общается только с `/api/chat`:
+
+```bash
+export TELEGRAM_BOT_TOKEN=0000000000:replace-me
+export BACKEND_API_BASE_URL=http://localhost:8000
+export API_TIMEOUT_SECONDS=15
+
+uv run python -m src.telegram_worker.main
+```
+
+Для Docker Compose:
+
+```bash
+docker compose up -d api telegram-worker
+docker compose logs -f telegram-worker
 ```
 
 ## Docker
@@ -83,6 +103,7 @@ Healthcheck API не зависит от `curl` внутри контейнер�
 ```bash
 pytest tests/test_api_contract.py
 python -m pytest tests/test_api_contract.py -q
+uv run pytest tests/test_telegram_worker.py
 ```
 
 ## Правило разработки
