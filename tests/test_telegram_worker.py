@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 from dataclasses import dataclass
 
 import httpx
@@ -22,6 +23,7 @@ from src.telegram_worker.handlers import (
     handle_start,
     handle_text_message,
 )
+from src.telegram_worker.main import create_bot_session
 from src.telegram_worker.service import FALLBACK_RESPONSE_TEXT, TelegramChatService
 
 
@@ -258,3 +260,9 @@ def test_dispatcher_ignores_empty_update_without_crashing() -> None:
             await bot.session.close()
 
     asyncio.run(scenario())
+
+
+def test_create_bot_session_forces_ipv4_connector_family() -> None:
+    session = create_bot_session()
+
+    assert session._connector_init["family"] == socket.AF_INET
