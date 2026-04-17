@@ -17,6 +17,8 @@ DEFAULT_TEMPERATURE = 0.2
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_TIMEOUT_SECONDS = 30.0
 DEFAULT_YANDEX_BASE_URL = "https://llm.api.cloud.yandex.net"
+DEFAULT_BACKEND_API_BASE_URL = "http://localhost:8000"
+DEFAULT_API_TIMEOUT_SECONDS = 15.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +41,13 @@ class YandexGPTConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TelegramWorkerConfig:
+    bot_token: str | None
+    backend_api_base_url: str
+    api_timeout_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     app_name: str
     settings_database_path: Path
@@ -46,6 +55,7 @@ class AppConfig:
     default_llm_settings: LLMSettings
     mssql: MSSQLConfig
     yandex: YandexGPTConfig
+    telegram: TelegramWorkerConfig
 
 
 def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
@@ -85,6 +95,19 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
             base_url=_get_str(values, "YANDEX_GPT_BASE_URL", DEFAULT_YANDEX_BASE_URL),
             timeout_seconds=timeout_seconds,
         ),
+        telegram=TelegramWorkerConfig(
+            bot_token=_get_optional_str(values, "TELEGRAM_BOT_TOKEN"),
+            backend_api_base_url=_get_first_str(
+                values,
+                ("BACKEND_API_BASE_URL", "API_BASE_URL"),
+                DEFAULT_BACKEND_API_BASE_URL,
+            ),
+            api_timeout_seconds=_get_float(
+                values,
+                "API_TIMEOUT_SECONDS",
+                DEFAULT_API_TIMEOUT_SECONDS,
+            ),
+        ),
     )
 
 
@@ -103,6 +126,23 @@ def _get_str(values: Mapping[str, str], key: str, default: str) -> str:
 
     stripped_value = raw_value.strip()
     return stripped_value or default
+
+
+def _get_first_str(
+    values: Mapping[str, str],
+    keys: tuple[str, ...],
+    default: str,
+) -> str:
+    for key in keys:
+        raw_value = values.get(key)
+        if raw_value is None:
+            continue
+
+        stripped_value = raw_value.strip()
+        if stripped_value:
+            return stripped_value
+
+    return default
 
 
 def _get_optional_str(values: Mapping[str, str], key: str) -> str | None:

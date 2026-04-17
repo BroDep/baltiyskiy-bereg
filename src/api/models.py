@@ -9,7 +9,10 @@ from typing_extensions import Annotated
 # ── Chat ──────────────────────────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=2000)
+    message: str = Field(..., min_length=1, max_length=4000)
+    correlation_id: str | None = Field(default=None, min_length=1, max_length=128)
+    user_id: str | None = Field(default=None, min_length=1, max_length=128)
+    source: str | None = Field(default=None, min_length=1, max_length=256)
     session_id: str | None = None
     user_id: int | None = None
 
@@ -31,11 +34,71 @@ class ChatResponse(BaseModel):
     session_id: str
 
 
+class ChatSuccessResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    response_text: str = Field(..., min_length=1)
+    correlation_id: str = Field(..., min_length=1, max_length=128)
+
+
+class ChatErrorResponse(BaseModel):
+    status: Literal["error"] = "error"
+    error_code: Literal["CHAT_UNAVAILABLE"] = "CHAT_UNAVAILABLE"
+    message: str = (
+        "The chat service is temporarily unavailable. Please try again later."
+    )
+    correlation_id: str = Field(..., min_length=1, max_length=128)
+
+
 class HealthResponse(BaseModel):
     status: str
-    db_connected: bool
-    vector_store_connected: bool
-    version: str = "0.1.0"
+    db_connected: bool | None = None
+    vector_store_connected: bool | None = None
+    version: str | None = None
+
+
+class LiveResponse(BaseModel):
+    status: Literal["alive"] = "alive"
+
+
+class ReadyDependency(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    status: Literal["ready", "degraded"]
+    detail: str = Field(..., min_length=1, max_length=256)
+
+
+class ReadyResponse(BaseModel):
+    status: Literal["ready", "degraded"]
+    dependencies: list[ReadyDependency]
+
+
+class GenerateRequest(BaseModel):
+    prompt: str | None = Field(default=None, min_length=1, max_length=4000)
+    message: str | None = Field(default=None, min_length=1, max_length=4000)
+    correlation_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @property
+    def resolved_prompt(self) -> str:
+        return self.prompt or self.message or ""
+
+
+class GenerateResponseMetadata(BaseModel):
+    model_name: str = Field(..., min_length=1, max_length=128)
+    correlation_id: str = Field(..., min_length=1, max_length=128)
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+
+
+class GenerateSuccessResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    response_text: str = Field(..., min_length=1)
+    metadata: GenerateResponseMetadata
+
+
+class GenerateErrorResponse(BaseModel):
+    status: Literal["error"] = "error"
+    error_code: Literal["LLM_TIMEOUT", "LLM_UNAVAILABLE"]
+    message: str = Field(..., min_length=1, max_length=256)
+    correlation_id: str = Field(..., min_length=1, max_length=128)
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────

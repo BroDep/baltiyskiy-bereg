@@ -30,6 +30,7 @@ baltiyskiy-bereg/
 │   ├── models/
 │   ├── services/
 │   ├── settings/
+│   ├── telegram_worker/
 │   ├── config.py
 │   └── main.py
 ├── tests/
@@ -52,7 +53,7 @@ baltiyskiy-bereg/
 | `api` | FastAPI backend, orchestration, admin settings endpoints |
 | `mssql` | source database, read-only queries |
 | `neo4j` | graph + vector knowledge store |
-| `telegram-worker` | polling bot, общается только с API |
+| `telegram-worker` | aiogram polling bot, ходит только в FastAPI API и не обращается к БД напрямую |
 | `sync-worker` | scheduled sync из MSSQL/KB в Neo4j |
 | `settings storage` | persistence для system prompt и LLM settings |
 | `yandexgpt gateway` | request/response интеграция для `POST /api/llm/generate` |
@@ -138,6 +139,9 @@ docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
 | `LLM_TEMPERATURE` | default temperature for persisted LLM settings |
 | `LLM_MAX_TOKENS` | default max token limit |
 | `LLM_TIMEOUT_SECONDS` | default upstream timeout |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token for polling worker |
+| `BACKEND_API_BASE_URL` | FastAPI base URL used by the Telegram worker |
+| `API_TIMEOUT_SECONDS` | timeout for Telegram worker -> FastAPI chat requests |
 
 ---
 
