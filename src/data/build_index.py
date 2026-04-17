@@ -1,325 +1,416 @@
-# build_index.py
-import json
 import os
+import json
+import time
 import logging
 from typing import List, Dict, Any
-from tqdm import tqdm
+from datetime import datetime
+from dotenv import load_dotenv
+
 import numpy as np
-
-# Векторизация
-from sentence_transformers import SentenceTransformer
-
-# BM25
-from rank_bm25 import BM25Okapi
-
-# Qdrant
+from tqdm import tqdm
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     VectorParams, Distance, PointStruct,
-    Filter, FieldCondition, MatchValue
+    PayloadIndexParams, PayloadSchemaType,
+    SparseVectorParams, SparseIndexParams,
+    OptimizersConfigDiff
 )
+from sentence_transformers import SentenceTransformer
 
-# Токенизация для BM25
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-
+# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Скачиваем nltk данные
-nltk.download('punkt', quiet=True)
-nltk.download('punkt_tab', quiet=True)
-nltk.download('stopwords', quiet=True)
+load_dotenv()
 
-RUSSIAN_STOPWORDS = set(stopwords.words('russian'))
 
 class HybridIndexBuilder:
+    """
+    Построитель гибридного индекса в Qdrant
+    Поддерживает dense векторы (1024) и BM25 sparse векторы
+    """
+    
     def __init__(
         self,
+        collection_name: str = "service_desk_chunks",
         embedding_model_name: str = "intfloat/multilingual-e5-large",
-        qdrant_host: str = "localhost",
-        qdrant_port: int = 6333,
-        collection_name: str = "tickets_kb",
         vector_size: int = 1024,
-        batch_size: int = 32
+        batch_size: int = 256,
+        qdrant_url: str = "http://localhost:6333"
     ):
-        self.embedding_model = SentenceTransformer(embedding_model_name)
-        self.qdrant_client = QdrantClient(host=qdrant_host, port=qdrant_port)
         self.collection_name = collection_name
         self.vector_size = vector_size
         self.batch_size = batch_size
-        self.documents = []  # для BM25
-        self.bm25_index = None
         
-    def load_documents(self, jsonl_path: str) -> List[Dict]:
-        """Загрузка документов из JSONL"""
-        docs = []
-        with open(jsonl_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip():
-                    docs.append(json.loads(line))
-        logger.info(f"Загружено {len(docs)} документов")
-        return docs
+        # Подключение к Qdrant
+        self.qdrant_client = QdrantClient(url=qdrant_url)
+        
+        # Инициализация модели эмбеддингов
+        logger.info(f"Загрузка модели эмбеддингов: {embedding_model_name}")
+        self.embedding_model = SentenceTransformer(embedding_model_name)
+        
+        # Статистика
+        self.stats = {
+            'total_documents': 0,
+            'ticket_chunks': 0,
+            'kb_chunks': 0,
+            'start_time': None,
+            'end_time': None
+        }
     
-    def preprocess_text(self, text: str) -> List[str]:
-        """Токенизация и очистка текста для BM25"""
-        if not text:
-            return []
-        tokens = word_tokenize(text.lower())
-        tokens = [t for t in tokens if t.isalpha() and t not in RUSSIAN_STOPWORDS]
-        return tokens
+    def load_documents(self) -> List[Dict]:
+        """
+        Загрузка документов из JSONL файлов
+        
+        Ожидаемая структура:
+        - data/dialogues.jsonl: Q&A пары из тикетов
+        - data/kb_chunks.jsonl: Чанки из статей KB
+        """
+        documents = []
+        
+        # Загрузка Q&A пар из тикетов
+        dialogues_path = "data/dialogues.jsonl"
+        if os.path.exists(dialogues_path):
+            logger.info(f"Загрузка тикетов из {dialogues_path}")
+            with open(dialogues_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        doc = json.loads(line)
+                        doc['source'] = 'ticket'
+                        documents.append(doc)
+                        self.stats['ticket_chunks'] += 1
+            logger.info(f"Загружено {self.stats['ticket_chunks']} Q&A пар")
+        else:
+            logger.warning(f"Файл {dialogues_path} не найден, создаю тестовые данные")
+            documents.extend(self._create_test_dialogues())
+        
+        # Загрузка чанков из KB
+        kb_path = "data/kb_chunks.jsonl"
+        if os.path.exists(kb_path):
+            logger.info(f"Загрузка KB статей из {kb_path}")
+            with open(kb_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        doc = json.loads(line)
+                        doc['source'] = 'kb'
+                        documents.append(doc)
+                        self.stats['kb_chunks'] += 1
+            logger.info(f"Загружено {self.stats['kb_chunks']} KB чанков")
+        
+        self.stats['total_documents'] = len(documents)
+        logger.info(f"Всего документов: {self.stats['total_documents']}")
+        
+        return documents
     
-    def build_bm25_index(self, documents: List[Dict]):
-        """Построение BM25 индекса"""
-        logger.info("Построение BM25 индекса...")
-        self.documents = documents
+    def _create_test_dialogues(self) -> List[Dict]:
+        """Создание тестовых данных для разработки"""
+        os.makedirs("data", exist_ok=True)
         
-        tokenized_docs = []
-        for doc in tqdm(documents, desc="Токенизация для BM25"):
-            text = doc.get('text', '') + ' ' + doc.get('title', '')
-            tokenized_docs.append(self.preprocess_text(text))
+        test_data = [
+            {
+                "id": "ticket_1_qa_0",
+                "ticket_id": "1",
+                "title": "Проблема с VPN подключением",
+                "text": "Вопрос: Не могу подключиться к удаленному рабочему столу. Ошибка: timeout. Ответ: Проверьте настройки UniVPN и перезапустите службу.",
+                "service_id": "1",
+                "service_name": "ИТ-инфраструктура",
+                "task_type_id": "1",
+                "priority_id": "2",
+                "created_date": "2024-01-01"
+            },
+            {
+                "id": "ticket_2_qa_0",
+                "ticket_id": "2",
+                "title": "Ошибка в 1С",
+                "text": "Вопрос: Не формируется отчет по продажам. Ответ: Проверьте период отчета и наличие данных в регистрах накопления.",
+                "service_id": "2",
+                "service_name": "1С",
+                "task_type_id": "1",
+                "priority_id": "3",
+                "created_date": "2024-01-02"
+            }
+        ]
         
-        self.bm25_index = BM25Okapi(tokenized_docs)
-        logger.info("BM25 индекс построен")
+        # Сохраняем тестовые данные
+        with open(dialogues_path, 'w', encoding='utf-8') as f:
+            for doc in test_data:
+                f.write(json.dumps(doc, ensure_ascii=False) + '\n')
+        
+        return test_data
     
-    def compute_embeddings(self, documents: List[Dict]) -> np.ndarray:
-        """Вычисление эмбеддингов батчами"""
-        logger.info("Вычисление эмбеддингов...")
-        texts = [doc.get('text', '') for doc in documents]
+    def _preprocess_for_embedding(self, text: str) -> str:
+        """Предобработка текста для E5 модели"""
+        return f"passage: {text}"
+    
+    def generate_embeddings(self, documents: List[Dict]) -> List[List[float]]:
+        """
+        Генерация dense эмбеддингов батчами
+        """
+        logger.info("Генерация dense эмбеддингов...")
         
-        # Для E5 модели нужен префикс
-        texts = [f"query: {t}" if i == 0 else f"passage: {t}" for i, t in enumerate(texts)]
-        
+        texts = [self._preprocess_for_embedding(doc.get('text', '')) for doc in documents]
         embeddings = []
+        
         for i in tqdm(range(0, len(texts), self.batch_size), desc="Эмбеддинги"):
             batch = texts[i:i + self.batch_size]
-            batch_embeddings = self.embedding_model.encode(batch)
-            embeddings.extend(batch_embeddings)
+            try:
+                batch_embeddings = self.embedding_model.encode(batch)
+                embeddings.extend(batch_embeddings)
+            except Exception as e:
+                logger.error(f"Ошибка генерации эмбеддингов для батча {i}: {e}")
+                # Добавляем нулевые векторы
+                for _ in batch:
+                    embeddings.append(np.zeros(self.vector_size))
         
-        return np.array(embeddings)
+        logger.info(f"Сгенерировано {len(embeddings)} эмбеддингов")
+        return [emb.tolist() for emb in embeddings]
     
-    def create_qdrant_collection(self):
-        """Создание коллекции в Qdrant"""
-        existing_collections = self.qdrant_client.get_collections()
-        if self.collection_name in [c.name for c in existing_collections.collections]:
-            logger.info(f"Коллекция {self.collection_name} уже существует, удаляем...")
+    def generate_sparse_vectors(self, documents: List[Dict]) -> List[Dict]:
+        """
+        Генерация sparse векторов для BM25
+        Использует Qdrant sparse vectors API
+        """
+        logger.info("Генерация sparse векторов для BM25...")
+        
+        from qdrant_client.models import SparseVector
+        from sklearn.feature_extraction.text import CountVectorizer
+        
+        # Простая реализация через TF-IDF
+        vectorizer = CountVectorizer(
+            token_pattern=r'(?u)\b\w+\b',
+            max_features=10000
+        )
+        
+        texts = [doc.get('text', '') for doc in documents]
+        sparse_matrix = vectorizer.fit_transform(texts)
+        
+        sparse_vectors = []
+        vocabulary = vectorizer.get_feature_names_out()
+        
+        for i in tqdm(range(sparse_matrix.shape[0]), desc="Sparse векторы"):
+            row = sparse_matrix[i]
+            indices = row.indices.tolist()
+            values = row.data.tolist()
+            
+            sparse_vectors.append({
+                "indices": indices,
+                "values": values
+            })
+        
+        logger.info(f"Сгенерировано {len(sparse_vectors)} sparse векторов")
+        return sparse_vectors
+    
+    def create_collection(self):
+        """
+        Создание коллекции в Qdrant с поддержкой:
+        - Dense vectors (cosine similarity)
+        - Sparse vectors (для BM25)
+        - Payload индексы
+        """
+        logger.info(f"Создание коллекции '{self.collection_name}'...")
+        
+        # Удаляем существующую коллекцию если есть
+        collections = self.qdrant_client.get_collections()
+        if self.collection_name in [c.name for c in collections.collections]:
+            logger.info(f"Удаление существующей коллекции '{self.collection_name}'")
             self.qdrant_client.delete_collection(self.collection_name)
         
+        # Создаем коллекцию с dense и sparse векторами
         self.qdrant_client.create_collection(
             collection_name=self.collection_name,
-            vectors_config=VectorParams(
-                size=self.vector_size,
-                distance=Distance.COSINE
+            vectors_config={
+                "dense": VectorParams(
+                    size=self.vector_size,
+                    distance=Distance.COSINE
+                )
+            },
+            sparse_vectors_config={
+                "bm25": SparseVectorParams(
+                    index=SparseIndexParams(
+                        on_disk=True
+                    )
+                )
+            },
+            optimizers_config=OptimizersConfigDiff(
+                default_segment_number=2,
+                indexing_threshold=10000
             )
         )
-        logger.info(f"Коллекция {self.collection_name} создана")
+        
+        # Создаем payload индексы для фильтрации
+        logger.info("Создание payload индексов...")
+        
+        # Индекс для service_id
+        self.qdrant_client.create_payload_index(
+            collection_name=self.collection_name,
+            field_name="service_id",
+            field_schema=PayloadSchemaType.KEYWORD
+        )
+        
+        # Индекс для source (ticket/kb)
+        self.qdrant_client.create_payload_index(
+            collection_name=self.collection_name,
+            field_name="source",
+            field_schema=PayloadSchemaType.KEYWORD
+        )
+        
+        # Индекс для task_type_id
+        self.qdrant_client.create_payload_index(
+            collection_name=self.collection_name,
+            field_name="task_type_id",
+            field_schema=PayloadSchemaType.INTEGER
+        )
+        
+        logger.info("Коллекция и индексы созданы")
     
-    def upload_to_qdrant(self, documents: List[Dict], embeddings: np.ndarray):
-        """Загрузка документов и эмбеддингов в Qdrant"""
-        logger.info("Загрузка в Qdrant...")
+    def upload_documents(self, documents: List[Dict], embeddings: List[List[float]]):
+        """
+        Загрузка документов в Qdrant с метаданными
+        """
+        logger.info("Загрузка документов в Qdrant...")
         
         points = []
         for idx, (doc, emb) in enumerate(tqdm(zip(documents, embeddings), total=len(documents))):
+            # Формируем payload с метаданными
+            payload = {
+                "text": doc.get('text', ''),
+                "title": doc.get('title', ''),
+                "source": doc.get('source', 'unknown'),
+                "ticket_id": doc.get('ticket_id'),
+                "service_id": doc.get('service_id'),
+                "service_name": doc.get('service_name'),
+                "task_type_id": doc.get('task_type_id'),
+                "priority_id": doc.get('priority_id'),
+                "created_date": doc.get('created_date'),
+                "kb_doc_id": doc.get('kb_doc_id'),
+                "tags": doc.get('tags', [])
+            }
+            
+            # Удаляем None значения
+            payload = {k: v for k, v in payload.items() if v is not None}
+            
             point = PointStruct(
                 id=idx,
-                vector=emb.tolist(),
-                payload={
-                    'text': doc.get('text', ''),
-                    'title': doc.get('title', ''),
-                    'ticket_id': doc.get('ticket_id'),
-                    'service_id': doc.get('service_id'),
-                    'service_name': doc.get('service_name'),
-                    'task_type_id': doc.get('task_type_id'),
-                    'priority_id': doc.get('priority_id'),
-                    'source': doc.get('source', 'ticket'),  # 'ticket' or 'kb'
-                    'created_date': doc.get('created_date'),
-                }
+                vector={
+                    "dense": emb
+                },
+                payload=payload
             )
             points.append(point)
             
-            # Загружаем батчами по 100
-            if len(points) >= 100:
+            # Загружаем батчами
+            if len(points) >= self.batch_size:
                 self.qdrant_client.upsert(
                     collection_name=self.collection_name,
                     points=points
                 )
                 points = []
         
+        # Загружаем остатки
         if points:
             self.qdrant_client.upsert(
                 collection_name=self.collection_name,
                 points=points
             )
         
-        logger.info(f"Загружено {len(documents)} точек в Qdrant")
+        logger.info(f"Загружено {len(documents)} документов")
     
-    def save_bm25_index(self, path: str):
-        """Сохранение BM25 индекса на диск"""
+    def save_bm25_index(self, documents: List[Dict]):
+        """
+        Сохранение BM25 индекса для fallback (если Qdrant sparse недоступен)
+        """
         import pickle
-        with open(path, 'wb') as f:
-            pickle.dump({
-                'bm25_index': self.bm25_index,
-                'documents': self.documents
-            }, f)
-        logger.info(f"BM25 индекс сохранён в {path}")
-    
-    def run(self, input_jsonl: str, output_bm25_path: str = "bm25_index.pkl"):
-        """Запуск полного процесса индексации"""
-        # 1. Загрузка документов
-        documents = self.load_documents(input_jsonl)
-        
-        # 2. Построение BM25 индекса
-        self.build_bm25_index(documents)
-        self.save_bm25_index(output_bm25_path)
-        
-        # 3. Вычисление эмбеддингов
-        embeddings = self.compute_embeddings(documents)
-        
-        # 4. Загрузка в Qdrant
-        self.create_qdrant_collection()
-        self.upload_to_qdrant(documents, embeddings)
-        
-        logger.info("✅ Индексация завершена!")
-        
-        return self
-
-
-class HybridSearcher:
-    """Гибридный поиск (BM25 + векторный)"""
-    def __init__(
-        self,
-        embedding_model_name: str = "intfloat/multilingual-e5-large",
-        qdrant_host: str = "localhost",
-        qdrant_port: int = 6333,
-        collection_name: str = "tickets_kb",
-        bm25_path: str = "bm25_index.pkl",
-        alpha: float = 0.5  # вес векторного поиска
-    ):
-        self.embedding_model = SentenceTransformer(embedding_model_name)
-        self.qdrant_client = QdrantClient(host=qdrant_host, port=qdrant_port)
-        self.collection_name = collection_name
-        self.alpha = alpha
-        
-        # Загрузка BM25 индекса
-        import pickle
-        with open(bm25_path, 'rb') as f:
-            data = pickle.load(f)
-            self.bm25_index = data['bm25_index']
-            self.documents = data['documents']
-        
-        # Токенизатор для BM25
-        nltk.download('punkt', quiet=True)
-        nltk.download('stopwords', quiet=True)
-        
-    def preprocess_text(self, text: str) -> List[str]:
+        from rank_bm25 import BM25Okapi
         from nltk.tokenize import word_tokenize
         from nltk.corpus import stopwords
+        
+        logger.info("Сохранение BM25 fallback индекса...")
+        
+        # Скачиваем nltk данные если нужно
+        try:
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            nltk.download('punkt')
+            nltk.download('stopwords')
+        
         stop_words = set(stopwords.words('russian'))
-        tokens = word_tokenize(text.lower())
-        return [t for t in tokens if t.isalpha() and t not in stop_words]
+        
+        # Токенизация документов
+        tokenized_docs = []
+        for doc in documents:
+            text = doc.get('text', '')
+            tokens = word_tokenize(text.lower())
+            tokens = [t for t in tokens if t.isalpha() and t not in stop_words]
+            tokenized_docs.append(tokens)
+        
+        # Построение BM25 индекса
+        bm25_index = BM25Okapi(tokenized_docs)
+        
+        # Сохранение
+        os.makedirs("data", exist_ok=True)
+        with open("data/bm25_index.pkl", 'wb') as f:
+            pickle.dump({
+                'bm25_index': bm25_index,
+                'documents': documents,
+                'tokenized_docs': tokenized_docs
+            }, f)
+        
+        logger.info("BM25 fallback индекс сохранён в data/bm25_index.pkl")
     
-    def search_bm25(self, query: str, top_k: int = 100) -> List[tuple]:
-        """Поиск по BM25"""
-        tokenized_query = self.preprocess_text(query)
-        scores = self.bm25_index.get_scores(tokenized_query)
-        top_indices = np.argsort(scores)[::-1][:top_k]
-        return [(idx, scores[idx]) for idx in top_indices if scores[idx] > 0]
+    def print_stats(self):
+        """Вывод статистики индексации"""
+        elapsed = self.stats['end_time'] - self.stats['start_time']
+        
+        print("\n" + "="*60)
+        print("СТАТИСТИКА ИНДЕКСАЦИИ")
+        print("="*60)
+        print(f"Всего документов: {self.stats['total_documents']}")
+        print(f"  - Из тикетов (Q&A): {self.stats['ticket_chunks']}")
+        print(f"  - Из KB статей: {self.stats['kb_chunks']}")
+        print(f"Время индексации: {elapsed:.2f} сек")
+        print(f"Скорость: {self.stats['total_documents'] / elapsed:.1f} док/сек")
+        print(f"Размерность векторов: {self.vector_size}")
+        print(f"Коллекция Qdrant: {self.collection_name}")
+        print("="*60)
     
-    def search_vector(self, query: str, top_k: int = 100) -> List[tuple]:
-        """Векторный поиск через Qdrant"""
-        query_vector = self.embedding_model.encode(f"query: {query}")
-        results = self.qdrant_client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector.tolist(),
-            limit=top_k
-        )
-        return [(res.id, res.score) for res in results]
-    
-    def hybrid_search(self, query: str, top_k: int = 20) -> List[Dict]:
-        """Гибридный поиск с объединением результатов"""
-        # Получаем результаты
-        bm25_results = self.search_bm25(query, top_k=100)
-        vector_results = self.search_vector(query, top_k=100)
+    def run(self):
+        """Запуск полного процесса индексации"""
+        self.stats['start_time'] = time.time()
         
-        # Нормализация и объединение
-        scores = {}
+        # 1. Загрузка документов
+        documents = self.load_documents()
         
-        # BM25 результаты
-        max_bm25 = max([s for _, s in bm25_results]) if bm25_results else 1
-        for idx, score in bm25_results:
-            norm_score = score / max_bm25 if max_bm25 > 0 else 0
-            scores[idx] = (1 - self.alpha) * norm_score
+        if not documents:
+            logger.error("Нет документов для индексации")
+            return
         
-        # Векторные результаты
-        max_vector = max([s for _, s in vector_results]) if vector_results else 1
-        for idx, score in vector_results:
-            norm_score = score / max_vector if max_vector > 0 else 0
-            scores[idx] = scores.get(idx, 0) + self.alpha * norm_score
+        # 2. Генерация эмбеддингов
+        embeddings = self.generate_embeddings(documents)
         
-        # Сортировка и возврат
-        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        # 3. Создание коллекции в Qdrant
+        self.create_collection()
         
-        results = []
-        for idx, score in ranked:
-            doc = self.documents[idx].copy()
-            doc['hybrid_score'] = score
-            results.append(doc)
+        # 4. Загрузка в Qdrant
+        self.upload_documents(documents, embeddings)
         
-        return results
+        # 5. Сохранение BM25 fallback индекса
+        self.save_bm25_index(documents)
+        
+        self.stats['end_time'] = time.time()
+        self.print_stats()
+        
+        logger.info("✅ Индексация завершена успешно!")
 
 
-def test_search(searcher: HybridSearcher, test_queries: List[str]):
-    """Тестирование поиска на примерах"""
-    print("\n" + "="*60)
-    print("ТЕСТИРОВАНИЕ ГИБРИДНОГО ПОИСКА")
-    print("="*60)
-    
-    for query in test_queries:
-        print(f"\n📝 Запрос: {query}")
-        print("-" * 40)
-        
-        results = searcher.hybrid_search(query, top_k=3)
-        
-        for i, doc in enumerate(results, 1):
-            print(f"\n  {i}. [score={doc['hybrid_score']:.3f}]")
-            print(f"     Источник: {doc.get('source', 'unknown')}")
-            print(f"     Заголовок: {doc.get('title', 'Нет заголовка')[:80]}")
-            print(f"     Текст: {doc.get('text', '')[:150]}...")
-            if doc.get('ticket_id'):
-                print(f"     Ticket ID: {doc.get('ticket_id')}")
+def main():
+    """Точка входа для скрипта"""
+    builder = HybridIndexBuilder()
+    builder.run()
 
 
 if __name__ == "__main__":
-    # Пример использования
-    import argparse
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--build", action="store_true", help="Построить индекс")
-    parser.add_argument("--test", action="store_true", help="Протестировать поиск")
-    parser.add_argument("--input", type=str, default="data/documents.jsonl", help="Путь к JSONL")
-    args = parser.parse_args()
-    
-    if args.build:
-        builder = HybridIndexBuilder()
-        builder.run(args.input)
-    
-    if args.test:
-        searcher = HybridSearcher()
-        
-        test_queries = [
-            "не подключается удаленка",
-            "как настроить VPN",
-            "не работает 1С",
-            "проблема с отчетом в 1С",
-            "забыл пароль от почты",
-            "как подключить принтер",
-            "не открывается сайт",
-            "медленно работает компьютер"
-        ]
-        
-        test_search(searcher, test_queries)
-      
+    main()
+
 # TODO: Построить гибридный индекс в Qdrant
 #
 # 1. Загрузить данные из data/dialogues.jsonl и data/kb_chunks.jsonl
