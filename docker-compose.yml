@@ -11,21 +11,30 @@ services:
       - "1433:1433"
     volumes:
       - mssql-data:/var/opt/mssql
-      - ./data/cleaned.bak:/var/opt/mssql/backup/cleaned.bak:ro
-      - ./restore-db.sh:/usr/local/bin/restore-db.sh:ro
-    entrypoint: /bin/bash
-    command: >
-      -c "
-      /opt/mssql/bin/sqlservr &
-      /usr/local/bin/restore-db.sh &
-      wait
-      "
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P $${MSSQL_SA_PASSWORD} -Q 'SELECT 1' -b -o /dev/null"]
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  app:
+    build: .
+    container_name: baltiyskiy-bereg-app
+    restart: unless-stopped
+    environment:
+      MSSQL_HOST: mssql
+      MSSQL_PORT: 1433
+      MSSQL_DATABASE: service_desk_tdbb
+      MSSQL_USER: SA
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+      YANDEX_GPT_API_KEY: "${YANDEX_GPT_API_KEY}"
+      YANDEX_GPT_FOLDER_ID: "${YANDEX_GPT_FOLDER_ID}"
+    ports:
+      - "8000:8000"
+    depends_on:
+      mssql:
+        condition: service_healthy
 
 volumes:
   mssql-data:
