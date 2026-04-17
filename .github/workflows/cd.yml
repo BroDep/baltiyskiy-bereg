@@ -1,0 +1,66 @@
+name: CD
+
+on:
+  push:
+    branches: [dev]
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/ci.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ vars.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          SERVER_HOST: ${{ vars.SERVER_HOST }}
+          SERVER_USER: ${{ vars.SERVER_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOF'
+            cd baltiyskiy-bereg
+            
+            # Pull latest changes
+            git pull origin dev
+            
+            # Build and start services
+            docker compose down
+            docker compose build --no-cache
+            docker compose up -d
+            
+            # Show logs
+            docker compose logs --tail=20
+          EOF
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f http://${{ vars.SERVER_HOST }}:8000/health || exit 1
+
+  notify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify success
+        if: success()
+        run: |
+          echo "Deployment successful! 🚀"
+          echo "Server: ${{ vars.SERVER_HOST }}"
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "Deployment failed! ❌"
+          echo "Check logs at: https://github.com/${{ github.repository }}/actions"
