@@ -64,7 +64,7 @@ ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116
 ```bash
 ssh -i ~/.ssh/baltiyskiy_bereg_new theimage01@111.88.159.116 \
   "docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
-   -S localhost -U SA -P 'SNdWoPBEUh8w9gD2Lfzr' \
+   -S localhost -U SA -P \"$MSSQL_SA_PASSWORD\" \
    -Q 'SELECT COUNT(*) FROM service_desk_tdbb.dbo.Task'"
 ```
 
@@ -74,7 +74,7 @@ Host: 111.88.159.116
 Port: 1433
 Database: service_desk_tdbb
 User: SA
-Password: SNdWoPBEUh8w9gD2Lfzr
+Password: (use value from .env or ask project owner)
 ```
 
 ### What's in the Database
@@ -103,7 +103,7 @@ docker logs mssql-baltbereg --tail=20
 
 # Query database
 docker exec mssql-baltbereg /opt/mssql-tools/bin/sqlcmd \
-  -S localhost -U SA -P 'SNdWoPBEUh8w9gD2Lfzr' \
+  -S localhost -U SA -P "$MSSQL_SA_PASSWORD" \
   -Q 'SELECT TOP 5 Name FROM service_desk_tdbb.dbo.Task'
 
 # Restart MSSQL
