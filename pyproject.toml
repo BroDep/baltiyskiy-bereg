@@ -7,6 +7,8 @@ dependencies = [
     "pymssql>=2.3",
     "requests>=2.31",
     "python-dotenv>=1.0",
+    "fastapi>=0.136.0",
+    "uvicorn>=0.44.0",
 ]
 
 [tool.uv]
