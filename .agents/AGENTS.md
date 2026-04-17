@@ -100,6 +100,21 @@ Contributions are welcome! Please contact **www.sooskolkos@gmail.com** for colla
 
 ---
 
+## Documentation Sync Rule ⚠️
+
+**IMPORTANT:** When adding new modules, services, or components, you MUST update `.agents/index.md`:
+
+| Change Type | Update Section in index.md |
+|-------------|---------------------------|
+| New source module | Repository Structure |
+| New database table/field | Key Tables |
+| New environment variable | Environment Variables (in .env.example) |
+| New service/endpoint | Document in appropriate section |
+
+This ensures all AI agents have up-to-date context about the project.
+
+---
+
 ## Code Style Guidelines
 
 ### General Principles
