@@ -16,7 +16,11 @@ from src.api.models import (
     ChatResponse,
     DailyPoint,
     HealthResponse,
+    HistoryResponse,
     HourlyPoint,
+    LoginRequest,
+    LoginResponse,
+    MessageItem,
     Source,
     StatsResponse,
     TicketItem,
@@ -220,7 +224,46 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
     except Exception:
         pass
 
+    if req.user_id:
+        try:
+            meta = {
+                "confidence_label": response.confidence_label,
+                "confidence_score": response.confidence_score,
+                "sources": [s.model_dump() for s in response.sources],
+                "escalate": response.escalate,
+            }
+            crud.save_message(db, user_id=req.user_id, role="user", content=req.message)
+            crud.save_message(db, user_id=req.user_id, role="assistant", content=response.answer, meta=meta)
+        except Exception:
+            pass
+
     return response
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@app.post("/auth/login", response_model=LoginResponse)
+def auth_login(req: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
+    user, status = crud.login_or_create(db, req.username, req.password)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Неверный пароль")
+    return LoginResponse(user_id=user.id, username=user.username)
+
+
+@app.get("/chat/history", response_model=HistoryResponse)
+def chat_history(
+    user_id: int = Query(...),
+    before_id: int | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+) -> HistoryResponse:
+    import json
+    rows, has_more = crud.get_history(db, user_id=user_id, before_id=before_id, limit=limit)
+    items = []
+    for r in rows:
+        meta = json.loads(r.meta) if r.meta else None
+        items.append(MessageItem(id=r.id, role=r.role, content=r.content, meta=meta, created_at=r.created_at))
+    return HistoryResponse(items=items, has_more=has_more)
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────

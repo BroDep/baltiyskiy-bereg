@@ -94,6 +94,60 @@
 .status-dot--degraded { background: #f5c842; }
 .status-dot--error    { background: #f07070; }
 
+.header__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header__username {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.header__logout {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 12px;
+  color: #fff;
+  font-size: 12px;
+  font-family: "Cera CY", sans-serif;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.header__logout:hover { background: rgba(255,255,255,0.25); }
+
+/* ── Chat history markers ────────────────────────────── */
+.chat-history-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  font-size: 12px;
+  color: #8a9cbf;
+}
+
+.chat-history-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e6ecf7;
+  border-top-color: #213565;
+  border-radius: 50%;
+  animation: typing-bounce-spin 0.7s linear infinite;
+}
+
+@keyframes typing-bounce-spin { to { transform: rotate(360deg); } }
+
+.chat-history-end {
+  text-align: center;
+  font-size: 11px;
+  color: #c9d5ed;
+  padding: 8px;
+}
+
 /* ── Chat window ─────────────────────────────────── */
 .chat-window {
   flex: 1;

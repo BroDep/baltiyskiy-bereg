@@ -145,12 +145,52 @@ const ALL_TICKETS = Array.from({ length: 1000 }, (_, i) => {
 }).sort((a, b) => b.created_at.localeCompare(a.created_at));
 
 
+// ── Mock history ─────────────────────────────────────────────────────────────
+
+const HISTORY_TOPICS = [
+  { q: 'Не работает VPN после обновления ноутбука', a: 'Обновите клиент UniVPN до актуальной версии с portal.company.ru.' },
+  { q: 'Забыл пароль от корпоративной почты', a: 'Сбросьте пароль через password.company.ru, подтверждение через SMS.' },
+  { q: 'Принтер HP не печатает на 3 этаже', a: 'Очередь очищена, драйвер переустановлен. Принтер работает.' },
+  { q: 'Нет доступа к сетевой папке после отпуска', a: 'Доступ восстановлен, учётная запись была заблокирована по истечении срока.' },
+  { q: '1С выдаёт ошибку при открытии базы', a: 'Перезапустите службу 1C:Enterprise через services.msc.' },
+  { q: 'Teams не открывается после обновления', a: 'Сброс кэша Teams решил проблему: %AppData%\\Microsoft\\Teams.' },
+  { q: 'Нужен доступ к Bitrix для нового сотрудника', a: 'Доступ предоставлен, учётная запись создана.' },
+  { q: 'Монитор мигает при подключении к докстанции', a: 'Замените кабель DisplayPort, проблема решена.' },
+];
+
+let _historyIdCounter = 9000;
+const MOCK_HISTORY = HISTORY_TOPICS.map((t, i) => {
+  const base = new Date();
+  base.setDate(base.getDate() - (HISTORY_TOPICS.length - i));
+  base.setHours(9 + i);
+  return [
+    { id: _historyIdCounter++, role: 'user',      content: t.q, meta: null, created_at: new Date(base).toISOString() },
+    { id: _historyIdCounter++, role: 'assistant', content: t.a, meta: { confidence_label: 'high', confidence_score: 8.0 + (i % 3) * 0.5, sources: [], escalate: false }, created_at: new Date(base.setMinutes(base.getMinutes() + 1)).toISOString() },
+  ];
+}).flat();
+
 // ── Fetch patch ───────────────────────────────────────────────────────────────
 
 const _fetch = window.fetch.bind(window);
 
 window.fetch = async (url, options = {}) => {
   const urlStr = typeof url === 'string' ? url : url.toString();
+
+  if (urlStr === '/api/auth/login' && options.method === 'POST') {
+    await delay(300);
+    const { username } = JSON.parse(options.body || '{}');
+    return json({ user_id: 1, username: username || 'demo' });
+  }
+
+  if (urlStr.startsWith('/api/chat/history')) {
+    await delay(250);
+    const params = new URL(urlStr, 'http://localhost').searchParams;
+    const beforeId = parseInt(params.get('before_id') || '0');
+    const limit    = parseInt(params.get('limit')     || '20');
+    const pool = beforeId ? MOCK_HISTORY.filter(m => m.id < beforeId) : MOCK_HISTORY;
+    const slice = pool.slice(-limit);
+    return json({ items: slice, has_more: pool.length > limit });
+  }
 
   if (urlStr === '/api/health') {
     await delay(150);
