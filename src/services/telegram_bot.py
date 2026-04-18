@@ -9,15 +9,16 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message
 
 from src.config import Settings
-from src.services.yandex_gpt import YandexGPTClient, YandexGPTError
+from src.services.rag_pipeline import RagPipeline
+from src.services.yandex_gpt import YandexGPTError
 
 logger = logging.getLogger(__name__)
 
 
 class TelegramBotService:
-    def __init__(self, settings: Settings, yandex_client: YandexGPTClient) -> None:
+    def __init__(self, settings: Settings, rag_pipeline: RagPipeline) -> None:
         self._settings = settings
-        self._yandex_client = yandex_client
+        self._rag_pipeline = rag_pipeline
         self._dispatcher = Dispatcher()
         self._bot: Bot | None = None
         self._polling_task: asyncio.Task[None] | None = None
@@ -30,7 +31,8 @@ class TelegramBotService:
 
     async def _handle_start(self, message: Message) -> None:
         await message.answer(
-            "Привет! Напишите вопрос, и я отправлю его в YandexGPT."
+            "Привет! Я отвечаю только по базе знаний и истории тикетов Балтийского Берега. "
+            "Если данных не хватит, честно скажу об этом."
         )
 
     async def _handle_text_message(self, message: Message) -> None:
@@ -43,18 +45,26 @@ class TelegramBotService:
         )
 
         try:
-            reply = await self._yandex_client.generate_reply(incoming_text)
+            answer = await self._rag_pipeline.answer(incoming_text)
         except YandexGPTError:
             logger.exception(
                 "Failed to generate Telegram reply: chat_id=%s",
                 message.chat.id,
             )
             await message.answer(
-                "Не удалось получить ответ от YandexGPT. Попробуйте еще раз чуть позже."
+                "Не удалось получить ответ из RAG-пайплайна. Попробуйте еще раз чуть позже."
             )
             return
 
-        await message.answer(reply)
+        reply_text = answer.reply
+        if answer.citations:
+            sources = "\n".join(
+                f"- {citation.label}: {citation.title}"
+                for citation in answer.citations[:4]
+            )
+            reply_text = f"{reply_text}\n\nИсточники:\n{sources}"
+
+        await message.answer(reply_text)
 
     async def _handle_unsupported_message(self, message: Message) -> None:
         await message.answer("Пожалуйста, отправьте текстовое сообщение.")
@@ -65,7 +75,6 @@ class TelegramBotService:
             return
 
         self._settings.validate_telegram()
-        self._settings.validate_yandex()
 
         if self._bot is None:
             self._bot = Bot(token=self._settings.telegram_bot_token_value)

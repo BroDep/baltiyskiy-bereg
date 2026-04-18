@@ -11,3 +11,5 @@ tests
 .env
 opencode.json
 conversation.jsonl
+frontend/react-app/node_modules
+frontend/react-app/build
