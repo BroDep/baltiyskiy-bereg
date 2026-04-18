@@ -56,6 +56,9 @@ No — задача интеграционная, но будут добавле
 | pyproject.toml | modify | Добавить зависимости FastAPI, uvicorn, aiogram, httpx, pytest и инструменты для асинхронных тестов |
 | .env.example | modify | Добавить переменные Telegram, YandexGPT, логирования и параметров приложения |
 | README-fastapi-telegram.md | create | Вынести документацию по FastAPI/Telegram/YandexGPT в отдельный README-файл |
+| Dockerfile | create | Собрать контейнер FastAPI + Telegram сервиса |
+| .dockerignore | create | Исключить лишние файлы из docker build context |
+| docker-compose.yml | modify | Поднять API-сервис и исправить запуск restore-db.sh в MSSQL контейнере |
 | uv.lock | create | Зафиксировать lockfile после установки новых зависимостей |
 | src/__init__.py | create | Сделать пакет приложения |
 | src/config.py | create | Описать настройки приложения и чтение переменных окружения |
@@ -111,6 +114,8 @@ No — задача интеграционная, но будут добавле
 - [x] `python -m compileall src tests` — исходники и тесты успешно скомпилировались без синтаксических ошибок.
 - [x] `uv run pytest` — 5 тестов прошли успешно.
 - [x] `uv run python - <<...` smoke check — `GET /health` вернул `{"status": "ok", "telegram_bot_enabled": false}` при отключенном Telegram-боте.
+- [x] `docker compose config` — docker-конфигурация валидируется локально.
+- [x] `docker build -t baltiyskiy-bereg-api:test .` — контейнер FastAPI-сервиса успешно собран локально.
 
 ### Negative
 - [x] Тест `test_chat_endpoint_returns_502_on_yandex_error` подтвердил контролируемый ответ `502` при ошибке upstream.
@@ -124,7 +129,7 @@ No — задача интеграционная, но будут добавле
 
 ### Summary
 
-Реализован единый FastAPI-сервер с Telegram long polling, клиентом YandexGPT, HTTP API и базовым логированием. Автотесты и smoke check пройдены.
+Реализован единый FastAPI-сервер с Telegram long polling, клиентом YandexGPT, HTTP API, базовым логированием и docker-конфигурацией для VPS. Автотесты и smoke check пройдены.
 
 ---
 
@@ -156,6 +161,7 @@ No — задача интеграционная, но будут добавле
 
 - Добавлен пакет `src/` с конфигурацией, FastAPI API, логированием и сервисами YandexGPT/Telegram.
 - Добавлены тесты для HTTP API и клиента YandexGPT.
+- Добавлены `Dockerfile` и обновлен `docker-compose.yml` для запуска API на VPS.
 - Обновлены `.env.example`, `README-fastapi-telegram.md`, `.agents/index.md` и task file.
 
 ### Assumptions verified

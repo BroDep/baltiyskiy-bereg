@@ -31,7 +31,7 @@
 ## Infra / Run
 
 - Python 3.11+
-- Docker / docker compose for MSSQL restore and local infra
+- Docker / docker compose for MSSQL restore and FastAPI service deploy
 - Main local commands:
   - `uv sync`
   - `uv run python -m src.main`
@@ -45,7 +45,8 @@
 - `.agents/index.md` — high-level architecture and important paths.
 - `.agents/requirements.md` — compact feature list.
 - `docs/tasks/` — source of truth for task workflow.
-- `docker-compose.yml` — local MSSQL setup.
+- `docker-compose.yml` — MSSQL and FastAPI service definitions for docker deploy.
+- `Dockerfile` — container image for FastAPI + Telegram service.
 - `.env.example` — environment variables template.
 - `src/api.py` — FastAPI app, endpoints, middleware, lifespan hooks.
 - `src/services/yandex_gpt.py` — YandexGPT client over REST completion API.

@@ -32,6 +32,12 @@ TELEGRAM_BOT_TOKEN=...
 uv run python -m src.main
 ```
 
+Или через Docker Compose:
+
+```bash
+docker compose up -d --build api
+```
+
 ## HTTP endpoints
 
 - `GET /` — простая проверка, что API запущено;
@@ -90,6 +96,13 @@ LOG_LEVEL=INFO
 
 ```bash
 uv run pytest
+```
+
+Для docker-режима:
+
+```bash
+docker compose ps
+docker compose logs api --tail=100
 ```
 
 После запуска можно написать Telegram-боту текстовое сообщение и проверить полный поток Telegram → YandexGPT → Telegram.
