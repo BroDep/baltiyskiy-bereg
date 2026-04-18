@@ -11,4 +11,6 @@ conversation.jsonl
 .DS_Store
 dist/
 build/
+node_modules/
 *.egg-info/
+opencode.json
