@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     rag_rerank_limit: int = 8
     rag_min_vector_score: float = 0.15
     rag_min_rerank_score: float = 0.45
-    rag_min_final_confidence: float = 0.7
+    rag_min_retrieval_confidence: float = 0.45
+    rag_min_final_confidence: float = 0.62
     rag_sync_on_startup: bool = True
     rag_sync_interval_seconds: int = 1800
     rag_sync_batch_size: int = 200

@@ -96,16 +96,22 @@ class RagPipeline:
         unsupported_claims = verification.get("unsupported_claims") or []
         grounded = bool(verification.get("grounded")) and not unsupported_claims
         model_confidence = float(draft_answer.get("confidence") or 0.0)
-        final_confidence = min(model_confidence, retrieval_confidence, verification_confidence)
+        final_confidence = self._compute_final_confidence(
+            retrieval_confidence=retrieval_confidence,
+            model_confidence=model_confidence,
+            verification_confidence=verification_confidence,
+        )
 
         if (
             not grounded
+            or retrieval_confidence < self._settings.rag_min_retrieval_confidence
             or final_confidence < self._settings.rag_min_final_confidence
             or bool(draft_answer.get("needs_human"))
         ):
             return self._refuse(
                 "Не могу уверенно ответить только по данным из базы. Лучше передать вопрос специалисту.",
                 reason=str(verification.get("reason") or draft_answer.get("reason") or "low_confidence"),
+                confidence=final_confidence,
                 retrieval_confidence=retrieval_confidence,
                 verification_confidence=verification_confidence,
             )
@@ -233,10 +239,25 @@ class RagPipeline:
         if not documents:
             return 0.0
         scores = [float(document.final_score or document.vector_score) for document in documents[:4]]
+        top_score = scores[0]
         average_score = sum(scores) / len(scores)
         kb_bonus = 0.1 if any(document.source_type == "kb" for document in documents[:3]) else 0.0
         evidence_bonus = min(0.1, 0.03 * len(documents))
-        return min(1.0, average_score * 0.8 + kb_bonus + evidence_bonus)
+        return min(1.0, top_score * 0.45 + average_score * 0.35 + kb_bonus + evidence_bonus)
+
+    def _compute_final_confidence(
+        self,
+        *,
+        retrieval_confidence: float,
+        model_confidence: float,
+        verification_confidence: float,
+    ) -> float:
+        return min(
+            1.0,
+            retrieval_confidence * 0.35
+            + model_confidence * 0.25
+            + verification_confidence * 0.40,
+        )
 
     async def _generate_grounded_answer(
         self,
@@ -258,6 +279,7 @@ class RagPipeline:
         answer_prompt = (
             "Ты готовишь ответ сотруднику только на основе найденных документов из MSSQL-базы. "
             "Нельзя использовать внешние знания. Если данных не хватает, верни отказ. "
+            "Если подтверждение есть только в похожем тикете, допустимо отвечать в форме 'В похожем кейсе...' или 'По найденным данным сначала проверьте ...'. "
             "Верни только JSON формата "
             '{"answerable": true, "answer": "... [S1]", "used_source_ids": ["S1"], '
             '"confidence": 0.0, "needs_human": false, "reason": "..."}. '
@@ -312,6 +334,7 @@ class RagPipeline:
 
         verifier_prompt = (
             "Проверь, подтверждается ли ответ источниками. Особенно учитывай KB как более надёжный источник. "
+            "Считай ответ допустимым, если он явно опирается на похожий кейс и не выходит за пределы фактов из источников. "
             "Если есть неподтверждённые факты, grounded=false. "
             "Верни только JSON формата "
             '{"grounded": true, "confidence": 0.0, "unsupported_claims": [], "reason": "..."}. '
@@ -373,13 +396,18 @@ class RagPipeline:
         reply: str,
         *,
         reason: str,
+        confidence: float | None = None,
         retrieval_confidence: float = 0.0,
         verification_confidence: float = 0.0,
     ) -> GroundedAnswer:
         return GroundedAnswer(
             reply=reply,
             citations=[],
-            confidence=min(retrieval_confidence, verification_confidence),
+            confidence=(
+                confidence
+                if confidence is not None
+                else max(retrieval_confidence, verification_confidence)
+            ),
             grounded=False,
             needs_human=True,
             reason=reason,
