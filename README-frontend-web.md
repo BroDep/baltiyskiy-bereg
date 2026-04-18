@@ -25,6 +25,16 @@ frontend/react-app/
 
 ## Запуск backend
 
+Самый простой вариант — поднять всё из корня репозитория:
+
+```bash
+./start.sh
+```
+
+После этого web UI будет доступен на `http://127.0.0.1:8000/`.
+
+Если нужен именно ручной запуск backend без helper-скриптов:
+
 ```bash
 uv run python -m src.main
 ```
@@ -57,7 +67,7 @@ http://localhost:8000/
 
 ## Docker / VPS
 
-`Dockerfile` собирает React build в отдельном stage и копирует его в Python image. После `docker compose up -d --build api` фронтенд доступен на `/`, а API — на `/api/*`.
+`Dockerfile` собирает React build в отдельном stage и копирует его в Python image. После `./start.sh` или `docker compose up -d --build api` фронтенд доступен на `/`, а API — на `/api/*`.
 
 ## API, которые использует MVP frontend
 

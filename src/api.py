@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -141,7 +142,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         answer = await rag_pipeline.answer(payload.message)
         return ChatResponse(
             reply=answer.reply,
-            citations=[CitationResponse(**citation.__dict__) for citation in answer.citations],
+            citations=[CitationResponse(**asdict(citation)) for citation in answer.citations],
             confidence=answer.confidence,
             grounded=answer.grounded,
             needs_human=answer.needs_human,

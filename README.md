@@ -2,45 +2,37 @@
 
 Команда: `Код, кофе и трансформеры`
 
-RAG-ассистент для сервис-деска Балтийского Берега. Сервис отвечает на вопросы сотрудников только на основе MSSQL-базы сервис-деска и базы знаний, использует `Qdrant` для поиска, модели `Yandex AI Studio` для embeddings и генерации, делает rerank, citations и safe fallback, если уверенности недостаточно.
+RAG-ассистент для сервис-деска Балтийского Берега. Сервис ищет похожие тикеты и статьи в базе, строит ответ только на основе найденного контекста и возвращает citations.
 
-## Что умеет сервис
+## Что это такое
 
-- читать тикеты и KB из MSSQL в read-only режиме;
-- индексировать данные в `Qdrant`;
-- искать похожие кейсы по embeddings;
-- rerank'ить найденные документы;
-- генерировать grounded-ответы с citations;
-- отказывать в ответе, если данных недостаточно или есть риск галлюцинации;
-- отдавать ответы через `FastAPI` и Telegram-бота.
+Внутри сервиса есть:
 
-## Стек и зависимости
+- `MSSQL` с backup `cleaned.bak`;
+- `Qdrant` для векторного поиска;
+- `FastAPI` backend;
+- web-интерфейс на `React`, который открывается на `/`;
+- интеграция с `Yandex AI Studio` для embeddings и ответа.
 
-- `Python 3.11+`
-- `FastAPI`
-- `aiogram`
-- `httpx`
-- `pymssql`
-- `qdrant-client`
-- `pydantic-settings`
-- `uvicorn`
-- `pytest`, `pytest-asyncio`
-- `Docker` и `docker compose`
-- `MSSQL Server 2019`
-- `Qdrant`
-- `YandexGPT` и embeddings `text-search-doc/latest`, `text-search-query/latest`
+## Что нужно для запуска
 
-## Требования для запуска
+Подготовьте:
 
-Нужно подготовить:
+- `Docker` и `docker compose`;
+- `curl`;
+- `Python 3` на хосте для helper-скриптов;
+- доступ к `Yandex AI Studio`;
+- backup `cleaned.bak`.
 
-- `Docker` и `docker compose`
-- `uv`
-- доступ к `Yandex AI Studio`
-- дамп базы `cleaned.bak`
-- файл `.env` на основе `.env.example`
+## Быстрый старт за 3 шага
 
-Минимально обязательные переменные окружения:
+### 1. Создайте `.env`
+
+```bash
+cp .env.example .env
+```
+
+Заполните в `.env` минимум эти значения:
 
 ```env
 MSSQL_SA_PASSWORD=...
@@ -48,7 +40,159 @@ YANDEX_GPT_API_KEY=...
 YANDEX_GPT_FOLDER_ID=...
 ```
 
-Остальные переменные уже есть в `.env.example`.
+### 2. Положите backup в `data/cleaned.bak`
+
+```bash
+mkdir -p data
+curl -H "X-API-Key: YOUR_API_KEY" \
+  "https://data.ai-business-spb.ru/data/baltiyskiy-bereg/cleaned.bak" \
+  -o data/cleaned.bak
+```
+
+### 3. Запустите сервис одной командой
+
+```bash
+./start.sh
+```
+
+После запуска откройте:
+
+```text
+http://127.0.0.1:8000/
+```
+
+## Что делает `./start.sh`
+
+Скрипт автоматически:
+
+- проверяет наличие `.env`;
+- проверяет наличие `data/cleaned.bak`;
+- запускает `MSSQL`, `Qdrant` и `API`;
+- ждёт ответа от `GET /health`;
+- печатает, что делать дальше.
+
+## Как понять, что всё работает
+
+Проверьте статус:
+
+```bash
+./status.sh
+```
+
+Он показывает:
+
+- состояние контейнеров;
+- результат `GET /health`;
+- идёт ли индексация;
+- сколько документов уже проиндексировано;
+- есть ли ошибка в фоне.
+
+Пример ручной проверки:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+## Как пользоваться
+
+### Вариант 1. Через браузер
+
+Откройте:
+
+```text
+http://127.0.0.1:8000/
+```
+
+Введите вопрос сотрудника и отправьте его через форму.
+
+### Вариант 2. Через терминал
+
+```bash
+./ask.sh "Не подключается удаленка"
+```
+
+Скрипт отправляет запрос в `POST /api/chat` и красиво печатает JSON-ответ.
+
+Ручной вариант через `curl`:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Не подключается удаленка"}'
+```
+
+## Как работать с сервисом каждый день
+
+Запуск:
+
+```bash
+./start.sh
+```
+
+Проверка состояния:
+
+```bash
+./status.sh
+```
+
+Задать вопрос из терминала:
+
+```bash
+./ask.sh "Как настроить удаленку?"
+```
+
+Остановка:
+
+```bash
+./stop.sh
+```
+
+## Что означают поля в `/health`
+
+- `status` — API отвечает;
+- `rag_sync_running` — сейчас идёт индексация;
+- `rag_indexed_documents` — сколько документов уже попало в `Qdrant`;
+- `rag_last_error` — последняя ошибка синхронизации, если была;
+- `rag_ready=true` — основной индекс уже собран и сервис готов лучше отвечать.
+
+## Важно про первую индексацию
+
+Первая индексация может идти долго, потому что сервис загружает и индексирует большой объём тикетов и KB.
+
+Пока индексация не завершилась:
+
+- ответов с `needs_human=true` может быть больше;
+- safe fallback — это нормально;
+- сервис специально настроен не выдумывать факты.
+
+## Полезные команды
+
+```bash
+./start.sh
+./status.sh
+./ask.sh "Не подключается удаленка"
+./stop.sh
+docker compose logs api --tail=100
+docker compose logs mssql --tail=100
+docker compose logs qdrant --tail=100
+uv run pytest
+```
+
+## Локальная разработка без Docker для API
+
+Если хотите запускать только инфраструктуру в Docker, а API локально:
+
+```bash
+docker compose up -d mssql qdrant
+uv sync
+uv run python -m src.main
+```
+
+## Тесты
+
+```bash
+uv run pytest
+```
 
 ## Структура проекта
 
@@ -58,209 +202,19 @@ YANDEX_GPT_FOLDER_ID=...
 │  ├─ api.py
 │  ├─ config.py
 │  └─ services/
-│     ├─ mssql_knowledge_base.py
-│     ├─ qdrant_store.py
-│     ├─ rag_models.py
-│     ├─ rag_pipeline.py
-│     ├─ rag_sync.py
-│     ├─ telegram_bot.py
-│     ├─ text_normalization.py
-│     └─ yandex_gpt.py
+├─ frontend/react-app/
 ├─ tests/
-├─ docs/
 ├─ data/
 ├─ docker-compose.yml
 ├─ Dockerfile
-├─ pyproject.toml
-└─ .env.example
+├─ start.sh
+├─ status.sh
+├─ ask.sh
+└─ stop.sh
 ```
-
-Ключевые файлы:
-
-- `src/api.py` - FastAPI-приложение и endpoints
-- `src/services/rag_pipeline.py` - retrieval, rerank, answer, verify
-- `src/services/rag_sync.py` - фоновая синхронизация MSSQL -> Qdrant
-- `src/services/mssql_knowledge_base.py` - извлечение тикетов и KB из MSSQL
-- `src/services/qdrant_store.py` - работа с коллекцией Qdrant
-- `src/services/yandex_gpt.py` - completion и embeddings через Yandex AI Studio
-- `docker-compose.yml` - локальный деплой MSSQL, Qdrant и API
-
-## Подготовка данных
-
-Скачайте `cleaned.bak` и положите его в `data/cleaned.bak`.
-
-Пример:
-
-```bash
-curl -H "X-API-Key: YOUR_API_KEY" \
-  "https://data.ai-business-spb.ru/data/baltiyskiy-bereg/cleaned.bak" \
-  -o data/cleaned.bak
-```
-
-## Быстрый локальный запуск через Docker
-
-1. Подготовьте `.env`:
-
-```bash
-cp .env.example .env
-```
-
-2. Заполните секреты в `.env`.
-
-3. Поднимите все сервисы:
-
-```bash
-docker compose up -d --build
-```
-
-4. Проверьте здоровье API:
-
-```bash
-curl http://127.0.0.1:8000/health
-```
-
-5. Дождитесь первичной индексации.
-
-Важно:
-
-- первый `full sync` может идти долго, потому что индексируются десятки тысяч тикетов;
-- пока индексация не завершена, сервис может чаще отдавать safe fallback;
-- это нормальное поведение: бот лучше откажется, чем соврёт.
-
-## Локальная разработка без запуска API в Docker
-
-Если хотите запускать `api` локально, а `MSSQL` и `Qdrant` оставить в Docker:
-
-1. Поднимите инфраструктуру:
-
-```bash
-docker compose up -d mssql qdrant
-```
-
-2. Установите зависимости:
-
-```bash
-uv sync
-```
-
-3. Запустите API:
-
-```bash
-uv run python -m src.main
-```
-
-## Проверка работы
-
-Healthcheck:
-
-```bash
-curl http://127.0.0.1:8000/health
-```
-
-Тестовый запрос:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Не подключается удаленка"}'
-```
-
-Пример ответа:
-
-```json
-{
-  "reply": "Не могу уверенно ответить только по данным из базы. Лучше передать вопрос специалисту.",
-  "citations": [],
-  "confidence": 0.64,
-  "grounded": false,
-  "needs_human": true,
-  "reason": "low_confidence"
-}
-```
-
-Или, если данных уже достаточно:
-
-```json
-{
-  "reply": "Проверьте UniVPN и 2MFA Контур.Коннект. [KB#101]",
-  "citations": [
-    {
-      "label": "KB#101",
-      "source_type": "kb",
-      "source_id": 101,
-      "title": "UniVPN и 2MFA",
-      "excerpt": "Проверьте UniVPN и 2MFA Контур.Коннект."
-    }
-  ],
-  "confidence": 0.82,
-  "grounded": true,
-  "needs_human": false,
-  "reason": "verified"
-}
-```
-
-## Тесты
-
-Запуск тестов:
-
-```bash
-uv run pytest
-```
-
-Проверка импорта и синтаксиса:
-
-```bash
-uv run python -m compileall src tests
-```
-
-## Деплой
-
-Самый простой вариант деплоя - через `docker compose`.
-
-Шаги:
-
-1. Клонировать репозиторий.
-2. Положить `cleaned.bak` в `data/`.
-3. Создать `.env` из `.env.example`.
-4. Заполнить секреты.
-5. Выполнить:
-
-```bash
-docker compose up -d --build
-```
-
-Проверка после деплоя:
-
-```bash
-docker compose ps
-docker compose logs api --tail=100
-curl http://127.0.0.1:8000/health
-```
-
-## Поведение RAG
-
-- тикет индексируется как один chunk;
-- KB режется на chunks после очистки HTML;
-- ответ строится только по найденным документам;
-- citations обязательны;
-- после генерации ответ проходит дополнительную проверку;
-- если уверенность недостаточна, сервис возвращает отказ.
 
 ## Ограничения
 
-- качество ответов зависит от полноты первичного бэкфилла;
-- пока `Qdrant` не проиндексировал значимую часть базы, fallback'ов будет больше;
-- при rate limit'ах Yandex embeddings синхронизация может идти медленнее;
-- сервис специально настроен консервативно: не выдумывать ответ.
-
-## Команды, которые пригодятся
-
-```bash
-docker compose up -d --build
-docker compose ps
-docker compose logs api --tail=100
-docker compose logs qdrant --tail=100
-uv sync
-uv run pytest
-uv run python -m src.main
-```
+- качество ответов зависит от того, сколько данных уже проиндексировано;
+- при rate limit со стороны Yandex индексация может идти медленнее;
+- сервис консервативный: лучше отказаться от ответа, чем соврать.

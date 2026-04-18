@@ -226,18 +226,26 @@ class RagSyncService:
 
     def _load_state(self) -> dict[str, str]:
         path = self._settings.rag_sync_state_file
-        if not path.exists():
-            return {}
         try:
+            if not path.exists():
+                return {}
             return json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
         except json.JSONDecodeError:
             logger.warning("Failed to parse sync state file, starting from empty state")
+            return {}
+        except OSError:
+            logger.warning("Failed to read sync state file %s, starting from empty state", path)
             return {}
 
     def _save_state(self) -> None:
         path = self._settings.rag_sync_state_file
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(self._state, ensure_ascii=True, indent=2),
-            encoding="utf-8",
-        )
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(self._state, ensure_ascii=True, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            logger.warning("Failed to persist sync state file %s", path)

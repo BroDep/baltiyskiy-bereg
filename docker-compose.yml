@@ -22,7 +22,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:Z
     healthcheck:
       test:
         [
@@ -56,8 +56,8 @@ services:
       - "1433:1433"
     volumes:
       - mssql-data:/var/opt/mssql
-      - ./data/cleaned.bak:/var/opt/mssql/backup/cleaned.bak:ro
-      - ./restore-db.sh:/usr/local/bin/restore-db.sh:ro
+      - ./data/cleaned.bak:/var/opt/mssql/backup/cleaned.bak:ro,Z
+      - ./restore-db.sh:/usr/local/bin/restore-db.sh:ro,Z
     entrypoint: /bin/bash
     command: >
       -c "
