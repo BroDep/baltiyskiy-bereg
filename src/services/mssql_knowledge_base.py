@@ -197,7 +197,7 @@ class MSSQLKnowledgeBase:
         SELECT
             tfv.EntityId,
             ttf.NameXml AS FieldNameXml,
-            tcb.ValueXml AS ComboboxValueXml,
+            tcb.NameXml AS ComboboxNameXml,
             tfv.Value,
             tfv.NumericValue,
             tfv.DateValue,
@@ -220,7 +220,7 @@ class MSSQLKnowledgeBase:
         return grouped
 
     def _normalize_task_field_value(self, row: dict[str, object]) -> str:
-        combobox_value = normalize_lookup_value(str(row.get("ComboboxValueXml") or ""))
+        combobox_value = normalize_lookup_value(str(row.get("ComboboxNameXml") or ""))
         if combobox_value:
             return combobox_value
 

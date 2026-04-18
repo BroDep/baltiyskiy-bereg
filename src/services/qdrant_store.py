@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
 from typing import Any, Sequence
 
 from qdrant_client import QdrantClient
@@ -77,7 +78,7 @@ class QdrantStore:
 
         points = [
             PointStruct(
-                id=document.point_id,
+                id=self._numeric_point_id(document.point_id),
                 vector=list(embedding),
                 payload=self._document_to_payload(document),
             )
@@ -150,7 +151,7 @@ class QdrantStore:
             metadata = self._extract_metadata(payload)
             documents.append(
                 RetrievedDocument(
-                    point_id=str(point.id),
+                    point_id=str(payload.get("point_id") or point.id),
                     source_type=str(payload.get("source_type") or "ticket"),
                     source_id=int(payload.get("source_id") or 0),
                     chunk_index=int(payload.get("chunk_index") or 0),
@@ -169,6 +170,7 @@ class QdrantStore:
             "source_type": document.source_type,
             "source_id": document.source_id,
             "chunk_index": document.chunk_index,
+            "point_id": document.point_id,
             "title": document.title,
             "content": document.content,
             "citation_label": document.citation_label,
@@ -192,9 +194,14 @@ class QdrantStore:
             "content",
             "citation_label",
             "excerpt",
+            "point_id",
         ):
             metadata.pop(key, None)
         return metadata
+
+    def _numeric_point_id(self, point_id: str) -> int:
+        digest = hashlib.sha256(point_id.encode("utf-8", errors="ignore")).digest()
+        return int.from_bytes(digest[:8], byteorder="big", signed=False)
 
     def _sanitize_payload_value(self, value: Any) -> Any:
         if value is None:

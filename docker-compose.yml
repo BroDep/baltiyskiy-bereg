@@ -12,6 +12,13 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      MSSQL_HOST: mssql
+      MSSQL_PORT: "1433"
+      QDRANT_URL: http://qdrant:6333
+      RAG_ENABLED: "true"
+      RAG_SYNC_ON_STARTUP: "true"
+      RAG_SYNC_BATCH_SIZE: "50"
     ports:
       - "8000:8000"
     volumes:
@@ -28,7 +35,7 @@ services:
       start_period: 20s
 
   qdrant:
-    image: qdrant/qdrant:v1.15.5
+    image: qdrant/qdrant:v1.17.1
     container_name: qdrant-baltbereg
     restart: unless-stopped
     ports:
@@ -36,16 +43,6 @@ services:
       - "6334:6334"
     volumes:
       - qdrant-data:/qdrant/storage
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:6333/healthz', timeout=5).read()\"",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
 
   mssql:
     image: mcr.microsoft.com/mssql/server:2019-CU18-ubuntu-20.04

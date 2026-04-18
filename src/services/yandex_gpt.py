@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Literal
@@ -152,19 +153,29 @@ class YandexGPTClient:
             "Authorization": f"Api-Key {self._settings.yandex_gpt_api_key_value}",
             "Content-Type": "application/json",
         }
-        logger.info("Sending request to Yandex AI endpoint: url=%s", url)
-        try:
-            response = await self._http_client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            logger.exception("Yandex AI HTTP request failed")
-            raise YandexGPTError("Failed to call Yandex AI endpoint") from exc
+        for attempt in range(5):
+            logger.info("Sending request to Yandex AI endpoint: url=%s", url)
+            try:
+                response = await self._http_client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if status_code in {429, 500, 502, 503, 504} and attempt < 4:
+                    await asyncio.sleep(0.5 * (2**attempt))
+                    continue
+                logger.exception("Yandex AI HTTP request failed")
+                raise YandexGPTError("Failed to call Yandex AI endpoint") from exc
+            except httpx.HTTPError as exc:
+                logger.exception("Yandex AI HTTP request failed")
+                raise YandexGPTError("Failed to call Yandex AI endpoint") from exc
 
-        try:
-            return response.json()
-        except ValueError as exc:
-            logger.exception("Failed to decode Yandex AI response JSON")
-            raise YandexGPTError("Invalid JSON from Yandex AI endpoint") from exc
+            try:
+                return response.json()
+            except ValueError as exc:
+                logger.exception("Failed to decode Yandex AI response JSON")
+                raise YandexGPTError("Invalid JSON from Yandex AI endpoint") from exc
+
+        raise YandexGPTError("Failed to call Yandex AI endpoint")
 
     def _extract_json_object(self, response_text: str) -> dict[str, Any]:
         stripped = response_text.strip()

@@ -133,20 +133,27 @@ class RagSyncService:
 
     async def _run_full_sync(self) -> SyncSummary:
         summary = SyncSummary(full_sync=True)
-        last_ticket_id = 0
-        while True:
-            ticket_documents = await asyncio.to_thread(
-                self._knowledge_base.fetch_ticket_batch_after_id,
-                last_ticket_id,
-                self._settings.rag_sync_batch_size,
-            )
-            if not ticket_documents:
-                break
-            await self._index_documents(ticket_documents, replace=False)
-            summary.ticket_documents += len(ticket_documents)
-            last_ticket_id = max(document.source_id for document in ticket_documents)
+        tickets_done = self._state.get("full_sync_tickets_done") == "true"
+        last_ticket_id = int(self._state.get("full_sync_ticket_last_id", "0"))
+        if not tickets_done:
+            while True:
+                ticket_documents = await asyncio.to_thread(
+                    self._knowledge_base.fetch_ticket_batch_after_id,
+                    last_ticket_id,
+                    self._settings.rag_sync_batch_size,
+                )
+                if not ticket_documents:
+                    self._state["full_sync_tickets_done"] = "true"
+                    self._state.pop("full_sync_ticket_last_id", None)
+                    self._save_state()
+                    break
+                await self._index_documents(ticket_documents, replace=False)
+                summary.ticket_documents += len(ticket_documents)
+                last_ticket_id = max(document.source_id for document in ticket_documents)
+                self._state["full_sync_ticket_last_id"] = str(last_ticket_id)
+                self._save_state()
 
-        last_kb_id = 0
+        last_kb_id = int(self._state.get("full_sync_kb_last_id", "0"))
         while True:
             kb_documents = await asyncio.to_thread(
                 self._knowledge_base.fetch_kb_batch_after_id,
@@ -158,6 +165,13 @@ class RagSyncService:
             await self._index_documents(kb_documents, replace=True)
             summary.kb_documents += len(kb_documents)
             last_kb_id = max(document.source_id for document in kb_documents)
+            self._state["full_sync_kb_last_id"] = str(last_kb_id)
+            self._save_state()
+
+        self._state.pop("full_sync_ticket_last_id", None)
+        self._state.pop("full_sync_tickets_done", None)
+        self._state.pop("full_sync_kb_last_id", None)
+        self._save_state()
 
         return summary
 
@@ -200,11 +214,13 @@ class RagSyncService:
         await asyncio.to_thread(self._qdrant_store.upsert_documents, documents, embeddings)
 
     async def _embed_documents(self, documents: list[RagDocument]) -> list[list[float]]:
-        semaphore = asyncio.Semaphore(4)
+        semaphore = asyncio.Semaphore(1)
 
         async def embed(document: RagDocument) -> list[float]:
             async with semaphore:
-                return await self._yandex_client.embed_text(document.content, kind="doc")
+                embedding = await self._yandex_client.embed_text(document.content, kind="doc")
+                await asyncio.sleep(0.2)
+                return embedding
 
         return await asyncio.gather(*(embed(document) for document in documents))
 
