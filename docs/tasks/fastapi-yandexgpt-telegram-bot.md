@@ -1,7 +1,7 @@
 # Task: FastAPI YandexGPT Telegram Bot
 
 **Created:** 2026-04-18
-**Status:** design
+**Status:** done
 
 ---
 
@@ -32,7 +32,7 @@
 
 ## Assumptions
 
-- AS-1: Для YandexGPT можно использовать OpenAI-совместимый chat/completions интерфейс с API-ключом и folder ID.
+- AS-1: Для YandexGPT можно использовать native REST completion API с API-ключом и folder ID.
 - AS-2: Для первого рабочего варианта достаточно Telegram long polling вместо webhook.
 - AS-3: Одного процесса FastAPI + фонового Telegram polling достаточно для локального запуска и демо.
 
@@ -53,23 +53,45 @@ No — задача интеграционная, но будут добавле
 
 | File | Action | Description |
 |------|--------|-------------|
-| | | |
+| pyproject.toml | modify | Добавить зависимости FastAPI, uvicorn, aiogram, httpx, pytest и инструменты для асинхронных тестов |
+| .env.example | modify | Добавить переменные Telegram, YandexGPT, логирования и параметров приложения |
+| README-fastapi-telegram.md | create | Вынести документацию по FastAPI/Telegram/YandexGPT в отдельный README-файл |
+| uv.lock | create | Зафиксировать lockfile после установки новых зависимостей |
+| src/__init__.py | create | Сделать пакет приложения |
+| src/config.py | create | Описать настройки приложения и чтение переменных окружения |
+| src/logging_setup.py | create | Настроить общее логирование приложения и HTTP-запросов |
+| src/services/__init__.py | create | Сделать пакет сервисов |
+| src/services/yandex_gpt.py | create | Реализовать клиент YandexGPT через REST completion API |
+| src/services/telegram_bot.py | create | Реализовать Telegram polling и проксирование сообщений в YandexGPT |
+| src/api.py | create | Собрать FastAPI-приложение, endpoints и lifecycle-хуки |
+| src/main.py | create | Точка входа для запуска uvicorn |
+| tests/conftest.py | create | Добавить корень проекта в `sys.path` для тестов |
+| tests/test_yandex_gpt.py | create | Проверить формирование/разбор ответов клиента YandexGPT |
+| tests/test_api.py | create | Проверить health endpoint и HTTP chat endpoint |
 
 ### Interfaces
 
--
+- `Settings` — валидирует конфиг из `.env` и собирает `model_uri` для YandexGPT (IV-3).
+- `YandexGPTClient.generate_reply(message: str, system_prompt: str | None = None) -> str` — отправляет запрос в YandexGPT и возвращает текст ответа (IV-1, IV-2).
+- `TelegramBotService.start() -> None` / `TelegramBotService.stop() -> None` — управляют polling внутри процесса FastAPI (IV-1, IV-4).
+- `create_app(settings: Settings | None = None) -> FastAPI` — собирает HTTP API, middleware и lifecycle приложения (IV-4).
 
 ### Test Strategy
 
--
+- Unit: проверить построение payload и разбор ответа YandexGPT-клиента.
+- API: проверить `/health` и `/api/chat` через FastAPI TestClient/ASGI transport.
+- Smoke: импорт приложения, запуск тестов, проверка, что Telegram сервис можно отключить в тестовом окружении.
 
 ### Phases
 
-1. **Phase 1**: Уточнить структуру файлов и зависимости.
+1. **Phase 1**: Подготовить структуру проекта, зависимости и конфигурацию.
+2. **Phase 2**: Реализовать YandexGPT-клиент, FastAPI API и Telegram polling.
+3. **Phase 3**: Подключить логирование, документацию и автоматические проверки.
 
 ### Dependencies
 
--
+- Phase 2 depends on Phase 1.
+- Phase 3 depends on Phase 2.
 
 ---
 
@@ -77,22 +99,32 @@ No — задача интеграционная, но будут добавле
 
 ### Completed
 
-- [ ]
+- [x] Phase 1: Подготовить структуру проекта, зависимости и конфигурацию.
+- [x] Phase 2: Реализовать YandexGPT-клиент, FastAPI API и Telegram polling.
+- [x] Phase 3: Подключить логирование, документацию и автоматические проверки.
 
 ---
 
 ## Verification
 
 ### Positive
-- [ ]
+- [x] `python -m compileall src tests` — исходники и тесты успешно скомпилировались без синтаксических ошибок.
+- [x] `uv run pytest` — 5 тестов прошли успешно.
+- [x] `uv run python - <<...` smoke check — `GET /health` вернул `{"status": "ok", "telegram_bot_enabled": false}` при отключенном Telegram-боте.
 
 ### Negative
-- [ ]
+- [x] Тест `test_chat_endpoint_returns_502_on_yandex_error` подтвердил контролируемый ответ `502` при ошибке upstream.
+- [x] Тест `test_generate_reply_raises_on_invalid_response` подтвердил обработку невалидного ответа YandexGPT.
 
 ### Invariants
-- [ ]
+- [x] IV-1: В `TelegramBotService` текстовые сообщения отправляются в `YandexGPTClient.generate_reply`, а ответ возвращается в тот же чат.
+- [x] IV-2: Ошибки upstream логируются; Telegram получает fallback-текст, HTTP API — `502`.
+- [x] IV-3: Секреты читаются из настроек окружения, в логах фиксируются только статусы, ID и длины сообщений.
+- [x] IV-4: FastAPI-приложение поднимает `/health`, smoke check выполнен успешно.
 
 ### Summary
+
+Реализован единый FastAPI-сервер с Telegram long polling, клиентом YandexGPT, HTTP API и базовым логированием. Автотесты и smoke check пройдены.
 
 ---
 
@@ -100,16 +132,21 @@ No — задача интеграционная, но будут добавле
 
 ### Invariant Checks
 
--
+- [x] IV-1: PASS — поток Telegram → YandexGPT → Telegram реализован.
+- [x] IV-2: PASS — предусмотрены логирование и безопасные ответы при сбоях.
+- [x] IV-3: PASS — секреты не выводятся в логи и читаются только из env.
+- [x] IV-4: PASS — health endpoint присутствует и проверен.
 
 ### Bug Findings
 
 | # | Description | Severity | Confidence |
 |---|-------------|----------|-------------|
+| — | Блокирующих проблем по итогам self-review не найдено | — | — |
 
 ### Recommendations
 
--
+- Добавить webhook-режим для продакшн-развертывания.
+- Добавить хранение истории диалога и RAG по MSSQL/KB в следующей задаче.
 
 ---
 
@@ -117,16 +154,21 @@ No — задача интеграционная, но будут добавле
 
 ### What was done
 
--
+- Добавлен пакет `src/` с конфигурацией, FastAPI API, логированием и сервисами YandexGPT/Telegram.
+- Добавлены тесты для HTTP API и клиента YandexGPT.
+- Обновлены `.env.example`, `README-fastapi-telegram.md`, `.agents/index.md` и task file.
 
 ### Assumptions verified
 
-- AS-1:
+- AS-1: Подтверждено — использован native REST completion API YandexGPT с `modelUri` и `Authorization: Api-Key`.
+- AS-2: Подтверждено — Telegram long polling встроен в lifecycle FastAPI.
+- AS-3: Подтверждено локально — приложение и проверки работают в одном процессе при отключаемом Telegram в тестах.
 
 ### Lessons learned
 
--
+- Для стабильных тестов важно явно переопределять env-зависимые настройки и отключать Telegram polling.
 
 ### Next steps
 
--
+- Заполнить реальные `YANDEX_GPT_*` и `TELEGRAM_BOT_TOKEN` в `.env` и проверить end-to-end переписку с ботом.
+- При необходимости добавить webhook, хранение контекста и интеграцию с MSSQL/RAG.
