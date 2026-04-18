@@ -4,16 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.api.dependencies import ReadinessService
 from src.api.models import (
+    ApiChatRequest,
     ChatErrorResponse,
-    ChatRequest,
     ChatSuccessResponse,
     GenerateErrorResponse,
     GenerateRequest,
     GenerateResponseMetadata,
     GenerateSuccessResponse,
-    HealthResponse,
     LiveResponse,
     ReadyResponse,
+    RemoteHealthResponse,
 )
 from src.services.llm import (
     LLMRequest,
@@ -49,7 +49,7 @@ def get_llm_service() -> LLMService:  # pragma: no cover - replaced by app state
     response_model=ChatSuccessResponse,
     responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"model": ChatErrorResponse}},
 )
-def post_chat(payload: ChatRequest) -> ChatSuccessResponse:
+def post_chat(payload: ApiChatRequest) -> ChatSuccessResponse:
     correlation_id = payload.correlation_id or "generated-by-api"
 
     if payload.message == FAILURE_SENTINEL:
@@ -120,9 +120,9 @@ def generate_llm_response(
     )
 
 
-@router.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    return HealthResponse()
+@router.get("/health", response_model=RemoteHealthResponse)
+def health() -> RemoteHealthResponse:
+    return RemoteHealthResponse()
 
 
 @router.get("/health/live", response_model=LiveResponse)

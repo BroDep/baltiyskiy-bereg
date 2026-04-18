@@ -38,6 +38,11 @@ class HealthResponse(BaseModel):
     version: str = "0.1.0"
 
 
+class RemoteHealthResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    version: str = "0.1.0"
+
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 class LoginRequest(BaseModel):

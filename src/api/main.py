@@ -32,6 +32,7 @@ from src.db.database import get_db, init_db
 load_dotenv()
 
 USE_STUBS = os.getenv("USE_STUBS", "false").lower() == "true"
+REMOTE_API_URL = os.getenv("REMOTE_API_URL", "http://111.88.159.116").rstrip("/")
 
 _pipeline = None
 
@@ -112,6 +113,38 @@ _STUB_ESCALATION = {
 }
 
 
+def _remote_chat(message: str, session_id: str, user_id: int | None) -> ChatResponse:
+    import requests as _requests
+    payload: dict = {"message": message}
+    if user_id is not None:
+        payload["user_id"] = str(user_id)
+    try:
+        r = _requests.post(
+            f"{REMOTE_API_URL}/api/chat",
+            json=payload,
+            timeout=35,
+        )
+        r.raise_for_status()
+        data = r.json()
+        answer = data.get("response_text") or data.get("answer") or ""
+        confidence_score = float(data.get("confidence_score", 7.0))
+        confidence_label = data.get("confidence_label", "high")
+        escalate = bool(data.get("escalate", False))
+        sources = [
+            Source(**s) for s in data.get("sources", [])
+        ] if data.get("sources") else []
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Remote API error: {exc}") from exc
+    return ChatResponse(
+        answer=answer,
+        confidence_score=confidence_score,
+        confidence_label=confidence_label,
+        escalate=escalate,
+        sources=sources,
+        session_id=session_id,
+    )
+
+
 def _stub_chat(message: str, session_id: str) -> ChatResponse:
     msg_lower = message.lower()
     stub = next(
@@ -179,13 +212,25 @@ def _db_connected() -> bool:
 
 # ── Chat ──────────────────────────────────────────────────────────────────────
 
+def _remote_healthy() -> bool:
+    import requests as _requests
+    try:
+        r = _requests.get(f"{REMOTE_API_URL}/health/live", timeout=5)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     if USE_STUBS:
         return HealthResponse(status="ok", db_connected=True, vector_store_connected=True)
     db_ok = _db_connected()
-    vs_ok = _pipeline.vector_store_connected if _pipeline else False
-    return HealthResponse(status="ok" if db_ok else "degraded", db_connected=db_ok, vector_store_connected=vs_ok)
+    if _pipeline is not None:
+        vs_ok = _pipeline.vector_store_connected
+    else:
+        vs_ok = _remote_healthy()
+    return HealthResponse(status="ok" if (db_ok and vs_ok) else "degraded", db_connected=db_ok, vector_store_connected=vs_ok)
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -195,7 +240,7 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
     if USE_STUBS:
         response = _stub_chat(req.message, session_id)
     elif _pipeline is None:
-        raise HTTPException(status_code=503, detail="Pipeline not initialised")
+        response = _remote_chat(req.message, session_id, req.user_id)
     else:
         result = await _pipeline.arun(req.message)
         sources = [
